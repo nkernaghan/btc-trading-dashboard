@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from backend.indicators.technical import (
+from indicators.technical import (
     calc_atr,
     calc_bollinger_bands,
     calc_ema,

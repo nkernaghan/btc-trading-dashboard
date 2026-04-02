@@ -1,6 +1,6 @@
 """Multi-timeframe confluence scoring — pure computation."""
 
-from backend.models.enums import VoteType
+from models.enums import VoteType
 
 
 def calc_confluence(

@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from backend.indicators.order_flow import (
+from indicators.order_flow import (
     calc_bid_ask_spread_score,
     calc_cvd,
     calc_l4_depth_imbalance,

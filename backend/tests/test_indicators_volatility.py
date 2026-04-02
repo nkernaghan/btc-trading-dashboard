@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from backend.indicators.volatility import (
+from indicators.volatility import (
     calc_garch_forecast,
     calc_rolling_realized_vol,
     calc_vol_regime,

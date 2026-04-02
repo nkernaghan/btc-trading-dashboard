@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from backend.indicators.market_structure import (
+from indicators.market_structure import (
     detect_bos_choch,
     detect_cme_gaps,
     detect_fair_value_gaps,
