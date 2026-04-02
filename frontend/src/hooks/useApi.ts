@@ -5,7 +5,7 @@ import { API_BASE } from '@/lib/constants';
 import { useDashboardStore } from '@/stores/dashboard';
 
 export function usePollingData() {
-  const { setPrice, setSignal, setVotes, setIndicators, setPosition } = useDashboardStore();
+  const { setPrice, setSignal, setVotes, setIndicators, setPosition, setCandles, timeframe } = useDashboardStore();
 
   useEffect(() => {
     async function fetchAll() {
@@ -65,10 +65,26 @@ export function usePollingData() {
       }
     }
 
+    // Fetch historical candles
+    async function fetchCandles() {
+      try {
+        const res = await fetch(`${API_BASE}/api/candles?timeframe=${timeframe}&limit=200`);
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            setCandles(data);
+          }
+        }
+      } catch (err) {
+        console.error('[API] candles fetch error:', err);
+      }
+    }
+
+    fetchCandles();
     fetchAll();
     const interval = setInterval(fetchAll, 5000); // Poll every 5s
     return () => clearInterval(interval);
-  }, [setPrice, setSignal, setVotes, setIndicators, setPosition]);
+  }, [setPrice, setSignal, setVotes, setIndicators, setPosition, setCandles, timeframe]);
 }
 
 export async function openPosition(params: {
