@@ -3,66 +3,85 @@
 import { useEffect } from 'react';
 import { API_BASE } from '@/lib/constants';
 import { useDashboardStore } from '@/stores/dashboard';
-import { IndicatorVote, Position } from '@/lib/types';
 
 export function usePollingData() {
-  const { setIndicators, setPosition } = useDashboardStore();
+  const { setPrice, setSignal, setVotes, setIndicators, setPosition } = useDashboardStore();
 
   useEffect(() => {
-    async function fetchIndicators() {
+    async function fetchAll() {
       try {
-        const res = await fetch(`${API_BASE}/api/indicators`);
-        if (res.ok) {
-          const data: IndicatorVote[] = await res.json();
-          const grouped: Record<string, IndicatorVote[]> = {};
-          data.forEach((v) => {
-            if (!grouped[v.category]) grouped[v.category] = [];
-            grouped[v.category].push(v);
-          });
-          setIndicators(grouped);
+        // Fetch price
+        const priceRes = await fetch(`${API_BASE}/api/price`);
+        if (priceRes.ok) {
+          const priceData = await priceRes.json();
+          if (priceData.price) {
+            setPrice(priceData.price);
+          }
+        }
+      } catch (err) {
+        console.error('[API] price fetch error:', err);
+      }
+
+      try {
+        // Fetch signal + votes
+        const sigRes = await fetch(`${API_BASE}/api/signal`);
+        if (sigRes.ok) {
+          const sigData = await sigRes.json();
+          if (sigData.signal) {
+            setSignal(sigData.signal);
+          }
+          if (sigData.votes) {
+            setVotes(sigData.votes);
+          }
+        }
+      } catch (err) {
+        console.error('[API] signal fetch error:', err);
+      }
+
+      try {
+        // Fetch indicators
+        const indRes = await fetch(`${API_BASE}/api/indicators`);
+        if (indRes.ok) {
+          const indData = await indRes.json();
+          setIndicators(indData);
         }
       } catch (err) {
         console.error('[API] indicators fetch error:', err);
       }
-    }
 
-    async function fetchPosition() {
       try {
-        const res = await fetch(`${API_BASE}/api/position/active`);
-        if (res.ok) {
-          const data = await res.json();
-          setPosition(data as Position | null);
+        // Fetch position
+        const posRes = await fetch(`${API_BASE}/api/position/active`);
+        if (posRes.ok) {
+          const posData = await posRes.json();
+          if (posData.position) {
+            setPosition(posData.position);
+          } else {
+            setPosition(null);
+          }
         }
       } catch (err) {
         console.error('[API] position fetch error:', err);
       }
     }
 
-    fetchIndicators();
-    fetchPosition();
-
-    const interval = setInterval(() => {
-      fetchIndicators();
-      fetchPosition();
-    }, 30000);
-
+    fetchAll();
+    const interval = setInterval(fetchAll, 5000); // Poll every 5s
     return () => clearInterval(interval);
-  }, [setIndicators, setPosition]);
+  }, [setPrice, setSignal, setVotes, setIndicators, setPosition]);
 }
 
 export async function openPosition(params: {
   direction: string;
   leverage: number;
   entry_price: number;
-  stop_loss: number;
-  take_profit: number;
-}): Promise<Position | null> {
+  size: number;
+}): Promise<unknown> {
   try {
-    const res = await fetch(`${API_BASE}/api/position/open`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params),
-    });
+    const res = await fetch(
+      `${API_BASE}/api/position/open?entry_price=${params.entry_price}&size=${params.size}&leverage=${params.leverage}&direction=${params.direction}`,
+      { method: 'POST' }
+    );
     if (res.ok) return await res.json();
     return null;
   } catch {
@@ -70,11 +89,9 @@ export async function openPosition(params: {
   }
 }
 
-export async function closePosition(positionId: string): Promise<boolean> {
+export async function closePosition(): Promise<boolean> {
   try {
-    const res = await fetch(`${API_BASE}/api/position/${positionId}/close`, {
-      method: 'POST',
-    });
+    const res = await fetch(`${API_BASE}/api/position/close`, { method: 'POST' });
     return res.ok;
   } catch {
     return false;
