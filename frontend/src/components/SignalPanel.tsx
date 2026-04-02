@@ -28,13 +28,13 @@ export default function SignalPanel() {
       {/* Composite Score */}
       <div className="text-center mb-4">
         <div className="text-4xl font-bold" style={{ color: scoreColor }}>
-          {signal ? signal.composite_score.toFixed(1) : '--'}
+          {signal ? (signal.composite_score ?? 0).toFixed(1) : '--'}
         </div>
         <div className={`text-lg font-bold ${directionColor}`}>
           {signal?.direction || 'WAIT'}
         </div>
         <div className="text-xs text-[#888] mt-1">
-          {signal ? `${signal.confluence}/${signal.total_indicators} confluence` : '--'}
+          {signal ? `${signal.confluence_count ?? signal.confluence ?? 0}/3 confluence` : '--'}
         </div>
         <div className="text-xs text-[#888]">
           Strength: {signal?.strength || '--'}
@@ -47,7 +47,7 @@ export default function SignalPanel() {
           <div className="text-[#888] uppercase tracking-wider mb-2">Trade Setup</div>
           <div className="grid grid-cols-2 gap-1">
             <span className="text-[#888]">Entry:</span>
-            <span>{formatPrice(signal.entry)}</span>
+            <span>{formatPrice(signal.entry_low ?? signal.entry ?? 0)}</span>
             <span className="text-[#888]">SL:</span>
             <span className="text-[#ff4444]">{formatPrice(signal.stop_loss)}</span>
             <span className="text-[#888]">TP1:</span>
@@ -55,11 +55,11 @@ export default function SignalPanel() {
             <span className="text-[#888]">TP2:</span>
             <span className="text-[#00ff88]">{formatPrice(signal.take_profit_2)}</span>
             <span className="text-[#888]">Leverage:</span>
-            <span>{signal.leverage}x</span>
+            <span>{signal.recommended_leverage ?? signal.leverage ?? 0}x</span>
             <span className="text-[#888]">Liq:</span>
             <span className="text-[#ff8800]">{formatPrice(signal.liquidation_price)}</span>
             <span className="text-[#888]">R:R:</span>
-            <span className="text-[#4488ff]">{signal.risk_reward.toFixed(2)}</span>
+            <span className="text-[#4488ff]">{(signal.risk_reward_ratio ?? signal.risk_reward ?? 0).toFixed(2)}</span>
           </div>
         </div>
       )}

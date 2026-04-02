@@ -9,19 +9,22 @@ export function formatPrice(value: number): string {
   }).format(value);
 }
 
-export function formatPct(value: number): string {
+export function formatPct(value?: number | null): string {
+  if (value == null) return '--';
   const sign = value >= 0 ? '+' : '';
   return `${sign}${value.toFixed(2)}%`;
 }
 
-export function formatCompact(value: number): string {
+export function formatCompact(value?: number | null): string {
+  if (value == null) return '--';
   if (value >= 1e9) return `${(value / 1e9).toFixed(2)}B`;
   if (value >= 1e6) return `${(value / 1e6).toFixed(2)}M`;
   if (value >= 1e3) return `${(value / 1e3).toFixed(1)}K`;
   return value.toFixed(0);
 }
 
-export function formatFunding(value: number): string {
+export function formatFunding(value?: number | null): string {
+  if (value == null) return '--';
   const sign = value >= 0 ? '+' : '';
   return `${sign}${(value * 100).toFixed(4)}%`;
 }

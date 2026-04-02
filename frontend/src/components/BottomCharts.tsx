@@ -54,7 +54,7 @@ export default function BottomCharts() {
               </div>
               <div className="text-xs text-[#888] mt-1">Open Interest</div>
               <div className="text-sm mt-2" style={{ color: oiDelta >= 0 ? '#00ff88' : '#ff4444' }}>
-                {oiDelta >= 0 ? '+' : ''}{oiDelta.toFixed(2)}% 24h
+                {oiDelta >= 0 ? '+' : ''}{(oiDelta ?? 0).toFixed(2)}% 24h
               </div>
             </div>
           </div>

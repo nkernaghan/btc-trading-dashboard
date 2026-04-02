@@ -15,7 +15,15 @@ export default function PositionTracker() {
     );
   }
 
-  const pnlColor = position.pnl_pct >= 0 ? 'text-[#00ff88]' : 'text-[#ff4444]';
+  const pnlPct = position.pnl_pct ?? position.unrealized_pnl_pct ?? 0;
+  const pnlUsd = position.pnl_usd ?? position.unrealized_pnl ?? 0;
+  const fundingPaid = position.funding_paid ?? position.accumulated_funding ?? 0;
+  const currentPrice = position.current_price ?? 0;
+  const liqPrice = position.liquidation_price ?? 0;
+  const distToLiq = position.distance_to_liq_pct ?? 0;
+  const breakeven = position.breakeven ?? position.breakeven_price ?? 0;
+
+  const pnlColor = pnlPct >= 0 ? 'text-[#00ff88]' : 'text-[#ff4444]';
   const dirColor = position.direction === 'LONG' ? 'text-[#00ff88]' : 'text-[#ff4444]';
 
   return (
@@ -32,24 +40,24 @@ export default function PositionTracker() {
         <span>{formatPrice(position.entry_price)}</span>
 
         <span className="text-[#888]">Current:</span>
-        <span>{formatPrice(position.current_price)}</span>
+        <span>{formatPrice(currentPrice)}</span>
 
         <span className="text-[#888]">PnL:</span>
         <span className={pnlColor}>
-          {formatPct(position.pnl_pct)} (${position.pnl_usd.toFixed(2)})
+          {formatPct(pnlPct)} (${pnlUsd.toFixed(2)})
         </span>
 
         <span className="text-[#888]">Liq Price:</span>
-        <span className="text-[#ff8800]">{formatPrice(position.liquidation_price)}</span>
+        <span className="text-[#ff8800]">{formatPrice(liqPrice)}</span>
 
         <span className="text-[#888]">Dist to Liq:</span>
-        <span className="text-[#ff8800]">{formatPct(position.distance_to_liq_pct)}</span>
+        <span className="text-[#ff8800]">{formatPct(distToLiq)}</span>
 
         <span className="text-[#888]">Funding:</span>
-        <span>${position.funding_paid.toFixed(4)}</span>
+        <span>${fundingPaid.toFixed(4)}</span>
 
         <span className="text-[#888]">Breakeven:</span>
-        <span>{formatPrice(position.breakeven)}</span>
+        <span>{formatPrice(breakeven)}</span>
       </div>
     </div>
   );

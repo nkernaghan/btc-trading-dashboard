@@ -43,7 +43,7 @@ export default function IndicatorPanel() {
                   />
                   <span className="text-[#888] truncate flex-1">{ind.name}</span>
                   <span className="text-[#e0e0e0] flex-shrink-0">
-                    {typeof ind.value === 'number' ? ind.value.toFixed(2) : ind.value}
+                    {typeof ind.value === 'number' ? ind.value.toFixed(2) : (ind.value ?? '--')}
                   </span>
                 </div>
               ))}
