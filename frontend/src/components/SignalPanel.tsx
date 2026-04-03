@@ -15,9 +15,9 @@ export default function SignalPanel() {
       : 'text-[#888]';
 
   const scoreColor =
-    signal && signal.composite_score > 0
+    signal?.direction === 'LONG'
       ? '#00ff88'
-      : signal && signal.composite_score < 0
+      : signal?.direction === 'SHORT'
       ? '#ff4444'
       : '#888';
 

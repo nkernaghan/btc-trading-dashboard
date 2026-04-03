@@ -1,6 +1,6 @@
 export type Direction = 'LONG' | 'SHORT' | 'WAIT';
-export type VoteType = 'STRONG_LONG' | 'LONG' | 'NEUTRAL' | 'SHORT' | 'STRONG_SHORT';
-export type SignalStrength = 'STRONG' | 'MODERATE' | 'WEAK' | 'NONE';
+export type VoteType = 'BULL' | 'BEAR' | 'NEUTRAL' | 'WARN';
+export type SignalStrength = 'STRONG' | 'WEAK' | 'NONE';
 export type Session = 'ASIA' | 'LONDON' | 'NEW_YORK' | 'OVERLAP';
 export type Timeframe = '1H' | '4H' | '1D' | '1W';
 
@@ -8,42 +8,55 @@ export interface IndicatorVote {
   name: string;
   category: string;
   vote: VoteType;
-  value: number | string;
-  weight: number;
-  details?: string;
+  strength: number;
+  value: number;
+  description: string;
 }
 
 export interface Signal {
-  direction: Direction;
-  strength: SignalStrength;
-  composite_score: number;
-  confluence: number;
-  total_indicators: number;
-  entry: number;
-  stop_loss: number;
-  take_profit_1: number;
-  take_profit_2: number;
-  leverage: number;
-  liquidation_price: number;
-  risk_reward: number;
-  warnings: string[];
-  votes: IndicatorVote[];
   timestamp: string;
+  direction: Direction;
+  composite_score: number;
+  strength: SignalStrength;
+  entry_low: number;
+  entry_high: number;
+  stop_loss: number;
+  stop_loss_pct: number;
+  take_profit_1: number;
+  take_profit_1_pct: number;
+  take_profit_2: number;
+  take_profit_2_pct: number;
+  recommended_leverage: number;
+  liquidation_price: number;
+  risk_reward_ratio: number;
+  confluence_count: number;
+  votes: IndicatorVote[];
+  warnings: string[];
+  // Aliases from frontend components
+  entry?: number;
+  leverage?: number;
+  risk_reward?: number;
+  confluence?: number;
 }
 
 export interface Position {
-  id: string;
-  direction: Direction;
-  leverage: number;
   entry_price: number;
-  current_price: number;
-  pnl_pct: number;
-  pnl_usd: number;
-  liquidation_price: number;
-  distance_to_liq_pct: number;
-  funding_paid: number;
-  breakeven: number;
-  opened_at: string;
+  size: number;
+  leverage: number;
+  direction: Direction;
+  entry_time: string;
+  current_price?: number;
+  unrealized_pnl?: number;
+  unrealized_pnl_pct?: number;
+  liquidation_price?: number;
+  distance_to_liq_pct?: number;
+  accumulated_funding?: number;
+  breakeven_price?: number;
+  // Aliases
+  pnl_pct?: number;
+  pnl_usd?: number;
+  funding_paid?: number;
+  breakeven?: number;
 }
 
 export interface Candle {
@@ -56,26 +69,8 @@ export interface Candle {
 }
 
 export interface OrderBook {
-  bids: [number, number][];
-  asks: [number, number][];
+  bids: { price: number; size: number }[];
+  asks: { price: number; size: number }[];
   spread: number;
   mid_price: number;
-}
-
-export interface DashboardData {
-  price: number;
-  price24hChange: number;
-  high24h: number;
-  low24h: number;
-  fundingRate: number;
-  openInterest: number;
-  oiDelta: number;
-  candles: Candle[];
-  timeframe: Timeframe;
-  signal: Signal | null;
-  votes: IndicatorVote[];
-  warnings: string[];
-  position: Position | null;
-  orderbook: OrderBook | null;
-  indicators: Record<string, IndicatorVote[]>;
 }

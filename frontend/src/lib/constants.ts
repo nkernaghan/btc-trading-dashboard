@@ -1,4 +1,4 @@
-import { Timeframe, VoteType } from './types';
+import { Timeframe } from './types';
 
 export const API_BASE = 'http://localhost:8000';
 export const WS_URL = 'ws://localhost:8000/ws';
@@ -18,22 +18,19 @@ export const COLORS = {
 };
 
 export const CATEGORY_LABELS: Record<string, string> = {
-  trend: 'Trend',
-  momentum: 'Momentum',
-  volatility: 'Volatility',
-  volume: 'Volume',
-  orderflow: 'Order Flow',
-  onchain: 'On-Chain',
-  sentiment: 'Sentiment',
-  macro: 'Macro',
+  ORDER_FLOW: 'Order Flow',
+  MACRO_DERIVATIVES: 'Macro / Derivatives',
+  ON_CHAIN: 'On-Chain',
+  SENTIMENT: 'Sentiment',
+  TECHNICAL: 'Technical',
+  VOLATILITY: 'Volatility',
 };
 
-export const VOTE_COLORS: Record<VoteType, string> = {
-  STRONG_LONG: '#00ff88',
-  LONG: '#44cc88',
+export const VOTE_COLORS: Record<string, string> = {
+  BULL: '#00ff88',
+  BEAR: '#ff4444',
   NEUTRAL: '#888888',
-  SHORT: '#cc4444',
-  STRONG_SHORT: '#ff4444',
+  WARN: '#ff8800',
 };
 
 export const TIMEFRAMES: Timeframe[] = ['1H', '4H', '1D', '1W'];
