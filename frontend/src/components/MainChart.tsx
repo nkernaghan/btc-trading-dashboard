@@ -17,14 +17,14 @@ export default function MainChart() {
 
     const chart = createChart(containerRef.current, {
       layout: {
-        background: { type: ColorType.Solid, color: '#131722' },
-        textColor: '#787b86',
+        background: { type: ColorType.Solid, color: '#ffffff' },
+        textColor: '#6b7280',
         fontFamily: "'Inter', sans-serif",
         fontSize: 11,
       },
       grid: {
-        vertLines: { color: 'rgba(42, 46, 57, 0.6)', style: 0 },
-        horzLines: { color: 'rgba(42, 46, 57, 0.6)', style: 0 },
+        vertLines: { color: 'rgba(229, 231, 235, 0.8)', style: 0 },
+        horzLines: { color: 'rgba(229, 231, 235, 0.8)', style: 0 },
       },
       crosshair: {
         mode: 1,
@@ -32,22 +32,22 @@ export default function MainChart() {
           color: 'rgba(41, 98, 255, 0.4)',
           width: 1,
           style: 2,
-          labelBackgroundColor: '#2a2e39',
+          labelBackgroundColor: '#e9eaec',
         },
         horzLine: {
           color: 'rgba(41, 98, 255, 0.4)',
           width: 1,
           style: 2,
-          labelBackgroundColor: '#2a2e39',
+          labelBackgroundColor: '#e9eaec',
         },
       },
       rightPriceScale: {
-        borderColor: '#2a2e39',
-        textColor: '#787b86',
+        borderColor: '#e5e7eb',
+        textColor: '#6b7280',
         scaleMargins: { top: 0.08, bottom: 0.22 },
       },
       timeScale: {
-        borderColor: '#2a2e39',
+        borderColor: '#e5e7eb',
         timeVisible: true,
         secondsVisible: false,
         fixLeftEdge: false,
@@ -114,14 +114,14 @@ export default function MainChart() {
         time: c.time,
         value: c.volume ?? 0,
         color: c.close >= c.open
-          ? 'rgba(38, 166, 154, 0.15)'
-          : 'rgba(239, 83, 80, 0.15)',
+          ? 'rgba(38, 166, 154, 0.18)'
+          : 'rgba(239, 83, 80, 0.18)',
       })) as any
     );
   }, [candles]);
 
   return (
-    <div className="relative w-full h-full" style={{ background: '#131722' }}>
+    <div className="relative w-full h-full" style={{ background: '#ffffff' }}>
       <div ref={containerRef} className="w-full h-full" />
     </div>
   );

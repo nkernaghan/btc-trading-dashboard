@@ -5,42 +5,42 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 :root {
-  /* TradingView-inspired dark palette — warmer, more contrast */
-  --bg-base: #131722;
-  --bg-panel: #1e222d;
-  --bg-surface: #262b3d;
-  --bg-elevated: #2a2e39;
-  --bg-hover: #363a45;
-  --bg-header: #1a1e2e;
+  /* Light professional palette — Refinitiv / TradingView light */
+  --bg-base: #ffffff;
+  --bg-panel: #f8f9fa;
+  --bg-surface: #f0f1f3;
+  --bg-elevated: #e9eaec;
+  --bg-hover: #eef0f3;
+  --bg-header: #f3f4f6;
 
-  /* Text — higher contrast */
-  --text-primary: #d1d4dc;
-  --text-secondary: #787b86;
-  --text-muted: #5d606b;
-  --text-label: #787b86;
-  --text-bright: #e8eaed;
+  /* Text */
+  --text-primary: #1e1e2d;
+  --text-secondary: #6b7280;
+  --text-muted: #9ca3af;
+  --text-label: #6b7280;
+  --text-bright: #111827;
 
-  /* Borders — visible but not heavy */
-  --border-subtle: #2a2e39;
-  --border-default: #363a45;
-  --border-strong: #434651;
+  /* Borders */
+  --border-subtle: #f0f1f3;
+  --border-default: #e5e7eb;
+  --border-strong: #d1d5db;
 
-  /* Signals — vibrant but professional */
+  /* Signals — kept identical, work well on light */
   --long: #26a69a;
-  --long-dim: #1a7a70;
+  --long-dim: #1d8a80;
   --long-bg: rgba(38, 166, 154, 0.08);
   --long-glow: rgba(38, 166, 154, 0.15);
   --short: #ef5350;
-  --short-dim: #b33a38;
+  --short-dim: #c0392b;
   --short-bg: rgba(239, 83, 80, 0.08);
   --short-glow: rgba(239, 83, 80, 0.15);
   --warn: #ff9800;
   --warn-bg: rgba(255, 152, 0, 0.08);
-  --neutral: #5d606b;
+  --neutral: #9ca3af;
 
   /* Accent */
   --accent: #2962ff;
-  --accent-muted: rgba(41, 98, 255, 0.15);
+  --accent-muted: rgba(41, 98, 255, 0.12);
   --btc: #f0b90b;
 }
 
@@ -76,7 +76,6 @@ body {
 }
 
 .terminal-left {
-  width: 220px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -99,13 +98,11 @@ body {
 }
 
 .terminal-bottom {
-  height: 148px;
   flex-shrink: 0;
   border-top: 1px solid var(--border-default);
 }
 
 .terminal-right {
-  width: 280px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -122,6 +119,63 @@ body {
 .terminal-position {
   flex-shrink: 0;
   border-top: 1px solid var(--border-default);
+}
+
+/* ─── Resize Handles ────────────────────────────────────────────────────── */
+
+.resize-handle {
+  position: relative;
+  z-index: 10;
+  flex-shrink: 0;
+  transition: background-color 0.15s ease;
+}
+
+.resize-handle-col {
+  width: 4px;
+  cursor: col-resize;
+  background: transparent;
+}
+
+.resize-handle-row {
+  height: 4px;
+  cursor: row-resize;
+  background: transparent;
+}
+
+.resize-handle:hover,
+.resize-handle.dragging {
+  background: var(--accent);
+  opacity: 0.35;
+}
+
+.resize-handle::after {
+  content: '';
+  position: absolute;
+  background: var(--border-strong);
+  border-radius: 2px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.resize-handle-col::after {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 2px;
+  height: 24px;
+}
+
+.resize-handle-row::after {
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 24px;
+  height: 2px;
+}
+
+.resize-handle:hover::after,
+.resize-handle.dragging::after {
+  opacity: 1;
 }
 
 /* ─── Scrollbars ────────────────────────────────────────────────────────── */
@@ -195,11 +249,11 @@ body {
 /* ─── Signal Score Glow ─────────────────────────────────────────────────── */
 
 .score-glow-long {
-  background: linear-gradient(180deg, rgba(38, 166, 154, 0.06) 0%, transparent 100%);
+  background: linear-gradient(180deg, rgba(38, 166, 154, 0.05) 0%, transparent 100%);
 }
 
 .score-glow-short {
-  background: linear-gradient(180deg, rgba(239, 83, 80, 0.06) 0%, transparent 100%);
+  background: linear-gradient(180deg, rgba(239, 83, 80, 0.05) 0%, transparent 100%);
 }
 
 /* ─── Row Hover ─────────────────────────────────────────────────────────── */

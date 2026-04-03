@@ -7,18 +7,18 @@ export const COLORS = {
   long: '#26a69a',
   short: '#ef5350',
   warn: '#ff9800',
-  neutral: '#5d606b',
+  neutral: '#9ca3af',
   accent: '#2962ff',
-  text: '#d1d4dc',
-  textBright: '#e8eaed',
-  textSecondary: '#787b86',
-  textMuted: '#5d606b',
-  border: '#363a45',
-  borderSubtle: '#2a2e39',
-  panel: '#1e222d',
-  surface: '#262b3d',
-  elevated: '#2a2e39',
-  base: '#131722',
+  text: '#1e1e2d',
+  textBright: '#111827',
+  textSecondary: '#6b7280',
+  textMuted: '#9ca3af',
+  border: '#e5e7eb',
+  borderSubtle: '#f0f1f3',
+  panel: '#f8f9fa',
+  surface: '#f0f1f3',
+  elevated: '#e9eaec',
+  base: '#ffffff',
   btc: '#f0b90b',
 };
 
@@ -34,7 +34,7 @@ export const CATEGORY_LABELS: Record<string, string> = {
 export const VOTE_COLORS: Record<string, string> = {
   BULL: '#26a69a',
   BEAR: '#ef5350',
-  NEUTRAL: '#5d606b',
+  NEUTRAL: '#9ca3af',
   WARN: '#ff9800',
 };
 
