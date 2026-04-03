@@ -285,6 +285,7 @@ export default function MainChart() {
         lineWidth: 2,
         pointMarkersVisible: true,
         pointMarkersRadius: 5,
+        priceScaleId: '',  // overlay — doesn't affect Y-axis
         priceLineVisible: false,
         lastValueVisible: true,
         crosshairMarkerVisible: true,
@@ -304,6 +305,7 @@ export default function MainChart() {
         color:       'rgba(38, 166, 154, 0.25)',
         lineWidth:   1,
         lineStyle:   2,
+        priceScaleId: '',
         priceLineVisible: false,
         lastValueVisible: false,
         crosshairMarkerVisible: false,
@@ -313,6 +315,7 @@ export default function MainChart() {
         color:       'rgba(239, 83, 80, 0.25)',
         lineWidth:   1,
         lineStyle:   2,
+        priceScaleId: '',
         priceLineVisible: false,
         lastValueVisible: false,
         crosshairMarkerVisible: false,
@@ -337,6 +340,7 @@ export default function MainChart() {
           color:       phaseColor,
           lineWidth:   3,
           lineStyle:   2, // dashed
+          priceScaleId: '',  // overlay — doesn't affect Y-axis scaling
           priceLineVisible: false,
           lastValueVisible: false,
           crosshairMarkerVisible: false,
