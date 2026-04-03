@@ -327,10 +327,19 @@ export default function MainChart() {
       candles.length === 0
     ) return;
 
-    // Candles + volume
-    candleRef.current.setData(candles as any);
+    // Deduplicate and sort candles by time (lightweight-charts requires strictly ascending)
+    const seen = new Set<number>();
+    const dedupedCandles = candles
+      .filter((c) => {
+        if (seen.has(c.time)) return false;
+        seen.add(c.time);
+        return true;
+      })
+      .sort((a, b) => a.time - b.time);
+
+    candleRef.current.setData(dedupedCandles as any);
     volumeRef.current.setData(
-      candles.map((c) => ({
+      dedupedCandles.map((c) => ({
         time:  c.time,
         value: c.volume ?? 0,
         color: c.close >= c.open
@@ -339,8 +348,8 @@ export default function MainChart() {
       })) as any
     );
 
-    const closes = candles.map((c) => c.close);
-    const times  = candles.map((c) => c.time);
+    const closes = dedupedCandles.map((c) => c.close);
+    const times  = dedupedCandles.map((c) => c.time);
 
     // Helper: map parallel value array to [{time, value}] skipping NaN
     const toSeries = (values: number[]) =>
