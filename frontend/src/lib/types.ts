@@ -2,7 +2,7 @@ export type Direction = 'LONG' | 'SHORT' | 'WAIT';
 export type VoteType = 'BULL' | 'BEAR' | 'NEUTRAL' | 'WARN';
 export type SignalStrength = 'STRONG' | 'WEAK' | 'NONE';
 export type Session = 'ASIA' | 'LONDON' | 'NEW_YORK' | 'OVERLAP';
-export type Timeframe = '1H' | '4H' | '1D' | '1W';
+export type Timeframe = '1m' | '5m' | '15m' | '1H' | '4H' | '1D' | '1W';
 
 export interface IndicatorVote {
   name: string;

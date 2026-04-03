@@ -8,6 +8,9 @@ from db import get_db
 router = APIRouter(prefix="/api", tags=["dashboard"])
 
 INTERVAL_MAP = {
+    "1m": "1m",
+    "5m": "5m",
+    "15m": "15m",
     "1H": "1h",
     "4H": "4h",
     "1D": "1d",
@@ -57,12 +60,15 @@ async def get_signal_history(limit: int = Query(50, le=500)):
     return [dict(row) for row in rows]
 
 @router.get("/candles")
-async def get_candles(timeframe: str = "1H", limit: int = 200):
+async def get_candles(timeframe: str = "1H", limit: int = Query(500, le=5000)):
     """Fetch historical candles from Hyperliquid REST API."""
     import time
     interval = INTERVAL_MAP.get(timeframe, "1h")
     # Calculate time range based on interval
-    interval_ms = {"1h": 3600_000, "4h": 14400_000, "1d": 86400_000, "1w": 604800_000}
+    interval_ms = {
+        "1m": 60_000, "5m": 300_000, "15m": 900_000,
+        "1h": 3600_000, "4h": 14400_000, "1d": 86400_000, "1w": 604800_000,
+    }
     ms_per_candle = interval_ms.get(interval, 3600_000)
     now = int(time.time() * 1000)
     start = now - (limit * ms_per_candle)

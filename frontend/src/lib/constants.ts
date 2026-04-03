@@ -38,4 +38,4 @@ export const VOTE_COLORS: Record<string, string> = {
   WARN: '#ff9800',
 };
 
-export const TIMEFRAMES: Timeframe[] = ['1H', '4H', '1D', '1W'];
+export const TIMEFRAMES: Timeframe[] = ['1m', '5m', '15m', '1H', '4H', '1D', '1W'];

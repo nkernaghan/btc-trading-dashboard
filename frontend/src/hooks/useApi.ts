@@ -68,7 +68,13 @@ export function usePollingData() {
     // Fetch historical candles
     async function fetchCandles() {
       try {
-        const res = await fetch(`${API_BASE}/api/candles?timeframe=${timeframe}&limit=200`);
+        // More candles for longer timeframes to get years of history
+        const limitMap: Record<string, number> = {
+          '1m': 500, '5m': 500, '15m': 500,
+          '1H': 1000, '4H': 2000, '1D': 2000, '1W': 1000,
+        };
+        const candleLimit = limitMap[timeframe] ?? 500;
+        const res = await fetch(`${API_BASE}/api/candles?timeframe=${timeframe}&limit=${candleLimit}`);
         if (res.ok) {
           const data = await res.json();
           if (Array.isArray(data) && data.length > 0) {
