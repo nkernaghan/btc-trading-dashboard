@@ -10,7 +10,7 @@ import {
 } from 'lightweight-charts';
 import type { IChartApi, ISeriesApi } from 'lightweight-charts';
 import { useDashboardStore } from '@/stores/dashboard';
-import { calcEMA, calcBollingerBands, calcVWAP } from '@/lib/indicators';
+import { calcEMA, calcBollingerBands, calcVWAP, calcSupportResistance } from '@/lib/indicators';
 import { COLORS } from '@/lib/constants';
 
 // ─── Bitcoin halving timestamps (UTC midnight) ─────────────────────────────
@@ -20,13 +20,33 @@ const HALVING_DATES: { time: number; label: string }[] = [
   { time: Math.floor(new Date('2020-05-11T00:00:00Z').getTime() / 1000), label: 'H3' },
   { time: Math.floor(new Date('2024-04-20T00:00:00Z').getTime() / 1000), label: 'H4' },
   { time: Math.floor(new Date('2028-04-15T00:00:00Z').getTime() / 1000), label: 'H5' },
+  { time: Math.floor(new Date('2032-04-14T00:00:00Z').getTime() / 1000), label: 'H6' },
+  { time: Math.floor(new Date('2036-04-13T00:00:00Z').getTime() / 1000), label: 'H7' },
 ];
 
-// 4-year cycle: bull phase starts ~12 months after halving, bear ~6 months before next
-// expressed as offsets in seconds
 const SECONDS_PER_DAY = 86400;
+
+// 4-year cycle: bull phase starts ~6 months after halving, bear ~6 months before next
+// expressed as offsets in seconds
 const BULL_START_OFFSET = 180 * SECONDS_PER_DAY;  // +6 months after halving
 const BULL_END_OFFSET   = 540 * SECONDS_PER_DAY;  // +18 months after halving
+
+// Zone phase offsets (seconds after halving)
+// Accumulation: 0 – 6 months, Bull: 6 – 18 months, Distribution: 18 – 24 months, Bear: 24 months – next halving
+const ZONE_ACCUM_END  =  180 * SECONDS_PER_DAY; //  6 months
+const ZONE_BULL_END   =  540 * SECONDS_PER_DAY; // 18 months
+const ZONE_DIST_END   =  730 * SECONDS_PER_DAY; // ~24 months
+
+// Zone line colors (horizontal dashed lines at chart top)
+const ZONE_COLORS = {
+  accum: 'rgba(59, 130, 246, 0.65)',   // blue  — accumulation
+  bull:  'rgba(34, 197, 94, 0.65)',    // green — bull run
+  dist:  'rgba(249, 115, 22, 0.65)',   // orange — distribution
+  bear:  'rgba(239, 68, 68, 0.65)',    // red   — bear market
+} as const;
+
+// Number of S/R levels to show per side
+const SR_TOP_N = 5;
 
 // ─── Indicator toggle state ────────────────────────────────────────────────
 interface IndicatorState {
@@ -37,6 +57,8 @@ interface IndicatorState {
   vwap: boolean;
   halving: boolean;
   cycle4y: boolean;
+  zones: boolean;
+  sr: boolean;
 }
 
 const DEFAULT_INDICATORS: IndicatorState = {
@@ -47,6 +69,8 @@ const DEFAULT_INDICATORS: IndicatorState = {
   vwap: false,
   halving: false,
   cycle4y: false,
+  zones: false,
+  sr: false,
 };
 
 type IndicatorKey = keyof IndicatorState;
@@ -59,6 +83,8 @@ const INDICATOR_BUTTONS: { key: IndicatorKey; label: string }[] = [
   { key: 'vwap',    label: 'VWAP'    },
   { key: 'halving', label: 'Halving' },
   { key: 'cycle4y', label: '4Y Cycle'},
+  { key: 'zones',   label: 'Zones'   },
+  { key: 'sr',      label: 'S/R'     },
 ];
 
 // ─── Colours for each series ───────────────────────────────────────────────
@@ -91,6 +117,13 @@ export default function MainChart() {
 
   // 4Y cycle background series (pairs of area lines)
   const cycleSeriesRefs = useRef<ISeriesApi<'Line'>[]>([]);
+
+  // Zone phase series — 4 colored dashed lines per cycle (accum/bull/dist/bear)
+  // Indexed as [cycleIdx * 4 + phaseIdx]
+  const zoneSeriesRefs = useRef<ISeriesApi<'Line'>[]>([]);
+
+  // S/R level series — [0..SR_TOP_N-1] resistance, [SR_TOP_N..2*SR_TOP_N-1] support
+  const srSeriesRefs = useRef<ISeriesApi<'Line'>[]>([]);
 
   const [indicators, setIndicators] = useState<IndicatorState>(DEFAULT_INDICATORS);
 
@@ -288,6 +321,56 @@ export default function MainChart() {
       cSeriesArr.push(bullUpper, bullLower);
     }
 
+    // Zone phase series — 4 horizontal dashed lines (at chart top) per cycle.
+    // Each line spans the phase's time range and is color-coded by phase.
+    // Order per cycle: [accum, bull, dist, bear]
+    const zSeriesArr: ISeriesApi<'Line'>[] = [];
+    const zonePhaseColors = [
+      ZONE_COLORS.accum,
+      ZONE_COLORS.bull,
+      ZONE_COLORS.dist,
+      ZONE_COLORS.bear,
+    ];
+    for (let i = 0; i < HALVING_DATES.length - 1; i++) {
+      for (const phaseColor of zonePhaseColors) {
+        const phaseSeries = chart.addSeries(LineSeries, {
+          color:       phaseColor,
+          lineWidth:   3,
+          lineStyle:   2, // dashed
+          priceLineVisible: false,
+          lastValueVisible: false,
+          crosshairMarkerVisible: false,
+          visible: DEFAULT_INDICATORS.zones,
+        });
+        zSeriesArr.push(phaseSeries);
+      }
+    }
+
+    // S/R level series — SR_TOP_N resistance (red dashed) + SR_TOP_N support (green dashed)
+    const srArr: ISeriesApi<'Line'>[] = [];
+    for (let i = 0; i < SR_TOP_N; i++) {
+      srArr.push(chart.addSeries(LineSeries, {
+        color:       'rgba(239, 68, 68, 0.8)',
+        lineWidth:   1,
+        lineStyle:   2,
+        priceLineVisible: false,
+        lastValueVisible: true,
+        crosshairMarkerVisible: false,
+        visible: DEFAULT_INDICATORS.sr,
+      }));
+    }
+    for (let i = 0; i < SR_TOP_N; i++) {
+      srArr.push(chart.addSeries(LineSeries, {
+        color:       'rgba(34, 197, 94, 0.8)',
+        lineWidth:   1,
+        lineStyle:   2,
+        priceLineVisible: false,
+        lastValueVisible: true,
+        crosshairMarkerVisible: false,
+        visible: DEFAULT_INDICATORS.sr,
+      }));
+    }
+
     chartRef.current       = chart;
     candleRef.current      = candleSeries;
     volumeRef.current      = volumeSeries;
@@ -300,6 +383,8 @@ export default function MainChart() {
     vwapRef.current        = vwapSeries;
     halvingSeriesRefs.current = hSeriesArr;
     cycleSeriesRefs.current   = cSeriesArr;
+    zoneSeriesRefs.current    = zSeriesArr;
+    srSeriesRefs.current      = srArr;
 
     const ro = new ResizeObserver(() => {
       if (containerRef.current) {
@@ -378,15 +463,36 @@ export default function MainChart() {
     const firstTime = times[0];
     const lastTime  = times[times.length - 1];
 
-    // Halving markers — use dedicated halving line series
-    // Each halving gets a single-point line series that we already created.
-    // We draw a visible price line at the halving date's price level.
+    // Extend the display range slightly into the future so series with future
+    // timestamps are visible when the user scrolls right.
+    const futureExtension = SECONDS_PER_DAY * 365 * 10; // 10 years ahead
+    const displayEnd = lastTime + futureExtension;
+
+    // Halving markers — one point per halving placed at its timestamp.
+    // For past halvings: snap to the closest candle close.
+    // For future halvings: place the point at the median close price so the
+    // marker appears visually reasonable (no candle data available yet).
+    const medianPrice = dedupedCandles[Math.floor(dedupedCandles.length / 2)]?.close
+      ?? (priceMin + priceMax) / 2;
+
     HALVING_DATES.forEach((hv, idx) => {
       const series = halvingSeriesRefs.current[idx];
       if (!series) return;
 
       const t = hv.time;
-      if (t < firstTime - SECONDS_PER_DAY * 30 || t > lastTime + SECONDS_PER_DAY * 30) {
+
+      if (t > displayEnd) {
+        series.setData([]);
+        return;
+      }
+
+      if (t > lastTime) {
+        // Future halving — no candle data; place at median price
+        series.setData([{ time: t as any, value: medianPrice }]);
+        return;
+      }
+
+      if (t < firstTime - SECONDS_PER_DAY * 30) {
         series.setData([]);
         return;
       }
@@ -401,12 +507,13 @@ export default function MainChart() {
         }
       }
 
-      // Set a single point at the halving candle's close price
-      const halvingPrice = dedupedCandles[closestIdx]?.close ?? (priceMin + priceMax) / 2;
+      const halvingPrice = dedupedCandles[closestIdx]?.close ?? medianPrice;
       series.setData([{ time: times[closestIdx] as any, value: halvingPrice }]);
     });
 
-    // 4Y Cycle shading — draw upper/lower boundary lines for each bull phase
+    // 4Y Cycle shading — draw upper/lower boundary lines for each bull phase.
+    // For cycles that extend beyond the last candle we generate synthetic
+    // timestamps at daily resolution so the lines appear in the future.
     for (let i = 0; i < HALVING_DATES.length - 1; i++) {
       const bullStart = HALVING_DATES[i].time + BULL_START_OFFSET;
       const bullEnd   = HALVING_DATES[i].time + BULL_END_OFFSET;
@@ -415,23 +522,106 @@ export default function MainChart() {
       const lowerSeries = cycleSeriesRefs.current[i * 2 + 1];
       if (!upperSeries || !lowerSeries) continue;
 
-      // Only include times within the bull phase that overlap with candle data
+      // Build the time range for this phase (candle data where available,
+      // synthetic daily ticks for the future portion)
       const phaseCandles = dedupedCandles.filter(
         (c) => c.time >= bullStart && c.time <= bullEnd
       );
 
-      if (phaseCandles.length === 0) {
+      // Synthetic future points if phase extends beyond last candle
+      const syntheticStart = Math.max(bullStart, lastTime + SECONDS_PER_DAY);
+      const syntheticPoints: { time: number; high: number; low: number }[] = [];
+      if (syntheticStart <= bullEnd) {
+        for (let t = syntheticStart; t <= bullEnd; t += SECONDS_PER_DAY) {
+          syntheticPoints.push({ time: t, high: priceMax, low: priceMin });
+        }
+      }
+
+      const allPhasePoints = [
+        ...phaseCandles.map((c) => ({ time: c.time, high: c.high, low: c.low })),
+        ...syntheticPoints,
+      ];
+
+      if (allPhasePoints.length === 0) {
         upperSeries.setData([]);
         lowerSeries.setData([]);
         continue;
       }
 
       upperSeries.setData(
-        phaseCandles.map((c) => ({ time: c.time as any, value: c.high * 1.0 }))
+        allPhasePoints.map((p) => ({ time: p.time as any, value: p.high }))
       );
       lowerSeries.setData(
-        phaseCandles.map((c) => ({ time: c.time as any, value: c.low * 1.0 }))
+        allPhasePoints.map((p) => ({ time: p.time as any, value: p.low }))
       );
+    }
+
+    // ── Zone phase shading ───────────────────────────────────────────────────
+    // Draw 4 colored horizontal dashed lines at priceMax per cycle phase.
+    // The line sits at the top of the chart and acts as a phase label band.
+    // Each cycle has 4 phases: accum (0–6m), bull (6–18m), dist (18–24m), bear (24m–next halving).
+    for (let i = 0; i < HALVING_DATES.length - 1; i++) {
+      const halvingTime    = HALVING_DATES[i].time;
+      const nextHalving    = HALVING_DATES[i + 1].time;
+
+      const phases = [
+        { start: halvingTime,                          end: halvingTime + ZONE_ACCUM_END  },
+        { start: halvingTime + ZONE_ACCUM_END,         end: halvingTime + ZONE_BULL_END   },
+        { start: halvingTime + ZONE_BULL_END,          end: halvingTime + ZONE_DIST_END   },
+        { start: halvingTime + ZONE_DIST_END,          end: nextHalving                   },
+      ];
+
+      phases.forEach((phase, phaseIdx) => {
+        const zSeries = zoneSeriesRefs.current[i * 4 + phaseIdx];
+        if (!zSeries) return;
+
+        // Generate a two-point horizontal line at priceMax for this phase.
+        // We always render even for future phases — lightweight-charts accepts
+        // any ascending timestamps including future ones.
+        const startT = Math.max(phase.start, firstTime - SECONDS_PER_DAY);
+        const endT   = Math.min(phase.end, displayEnd);
+
+        if (startT >= endT) {
+          zSeries.setData([]);
+          return;
+        }
+
+        // Two anchor points are sufficient for a straight horizontal line
+        zSeries.setData([
+          { time: startT as any, value: priceMax },
+          { time: endT   as any, value: priceMax },
+        ]);
+      });
+    }
+
+    // ── Support / Resistance levels ──────────────────────────────────────────
+    const sr = calcSupportResistance(dedupedCandles, 20, 0.01, SR_TOP_N);
+
+    // Each level becomes a horizontal line spanning the full candle range
+    sr.resistance.forEach((price, idx) => {
+      const s = srSeriesRefs.current[idx];
+      if (!s) return;
+      s.setData([
+        { time: firstTime as any, value: price },
+        { time: lastTime  as any, value: price },
+      ]);
+    });
+    // Clear any unused resistance slots
+    for (let i = sr.resistance.length; i < SR_TOP_N; i++) {
+      srSeriesRefs.current[i]?.setData([]);
+    }
+
+    sr.support.forEach((price, idx) => {
+      const s = srSeriesRefs.current[SR_TOP_N + idx];
+      if (!s) return;
+      s.setData([
+        { time: firstTime as any, value: price },
+        { time: lastTime  as any, value: price },
+      ]);
+    });
+    // Clear any unused support slots
+    for (let i = sr.support.length; i < SR_TOP_N; i++) {
+      srSeriesRefs.current[SR_TOP_N + i]?.setData([]);
     }
   }, [candles, indicators.halving]);
 
@@ -454,6 +644,14 @@ export default function MainChart() {
     cycleSeriesRefs.current.forEach((s) =>
       s.applyOptions({ visible: indicators.cycle4y })
     );
+
+    zoneSeriesRefs.current.forEach((s) =>
+      s.applyOptions({ visible: indicators.zones })
+    );
+
+    srSeriesRefs.current.forEach((s) =>
+      s.applyOptions({ visible: indicators.sr })
+    );
   }, [indicators]);
 
   // ─── Toggle handler ──────────────────────────────────────────────────────
@@ -471,6 +669,8 @@ export default function MainChart() {
       vwap:    '#9c27b0',
       halving: '#7c3aed',
       cycle4y: '#26a69a',
+      zones:   '#f97316',
+      sr:      '#22c55e',
     };
     return colorMap[key] ?? COLORS.accent;
   };

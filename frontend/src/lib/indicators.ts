@@ -138,6 +138,76 @@ export function calcVolumeProfile(
 }
 
 /**
+ * Calculates support and resistance levels from candle data by finding swing
+ * highs and swing lows over a rolling lookback window, then grouping nearby
+ * levels within a tolerance band and ranking by touch count.
+ *
+ * Returns the top `topN` support levels (below current price) and top `topN`
+ * resistance levels (above current price), sorted by strength descending.
+ */
+export interface SRLevel {
+  price: number;
+  touches: number;
+  type: 'support' | 'resistance';
+}
+
+export function calcSupportResistance(
+  candles: { time: number; high: number; low: number; close: number }[],
+  lookback: number = 20,
+  tolerance: number = 0.01,
+  topN: number = 5
+): { support: number[]; resistance: number[] } {
+  if (candles.length < lookback * 2 + 1) {
+    return { support: [], resistance: [] };
+  }
+
+  const swingHighs: number[] = [];
+  const swingLows: number[] = [];
+
+  // Identify swing highs and lows: a candle is a swing high if its high is the
+  // highest in the window [i-lookback, i+lookback], and a swing low if its low
+  // is the lowest in that same window.
+  for (let i = lookback; i < candles.length - lookback; i++) {
+    const windowHighs = candles.slice(i - lookback, i + lookback + 1).map((c) => c.high);
+    const windowLows  = candles.slice(i - lookback, i + lookback + 1).map((c) => c.low);
+    const maxHigh = Math.max(...windowHighs);
+    const minLow  = Math.min(...windowLows);
+
+    if (candles[i].high === maxHigh) swingHighs.push(candles[i].high);
+    if (candles[i].low  === minLow)  swingLows.push(candles[i].low);
+  }
+
+  // Group nearby price levels within the tolerance band by clustering
+  function clusterLevels(prices: number[]): { price: number; touches: number }[] {
+    if (prices.length === 0) return [];
+    const sorted = [...prices].sort((a, b) => a - b);
+    const clusters: { price: number; touches: number }[] = [];
+
+    let groupStart = 0;
+    for (let i = 1; i <= sorted.length; i++) {
+      const isLast = i === sorted.length;
+      const outsideTolerance = !isLast && sorted[i] > sorted[groupStart] * (1 + tolerance);
+      if (isLast || outsideTolerance) {
+        const group = sorted.slice(groupStart, i);
+        const avgPrice = group.reduce((s, v) => s + v, 0) / group.length;
+        clusters.push({ price: avgPrice, touches: group.length });
+        groupStart = i;
+      }
+    }
+
+    return clusters.sort((a, b) => b.touches - a.touches);
+  }
+
+  const resistanceClusters = clusterLevels(swingHighs);
+  const supportClusters    = clusterLevels(swingLows);
+
+  return {
+    resistance: resistanceClusters.slice(0, topN).map((c) => c.price),
+    support:    supportClusters.slice(0, topN).map((c) => c.price),
+  };
+}
+
+/**
  * Calculates estimated liquidation prices for long and short positions
  * at various leverage levels relative to an entry price.
  *
