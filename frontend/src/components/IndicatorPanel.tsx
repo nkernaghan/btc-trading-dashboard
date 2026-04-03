@@ -61,7 +61,7 @@ function CategoryRow({
       >
         <span
           className="text-[9px] font-semibold tracking-widest uppercase"
-          style={{ color: COLORS.textMuted, fontFamily: 'IBM Plex Sans, sans-serif' }}
+          style={{ color: COLORS.textMuted, fontFamily: 'Inter, sans-serif' }}
         >
           {label}
         </span>
@@ -167,7 +167,7 @@ export default function IndicatorPanel() {
             className="text-[9px] font-medium flex-shrink-0 data-value"
             style={{
               color: bullCount > bearCount ? COLORS.long : bearCount > bullCount ? COLORS.short : COLORS.textSecondary,
-              fontFamily: 'IBM Plex Sans, sans-serif',
+              fontFamily: 'Inter, sans-serif',
             }}
           >
             {bullCount}/{totalCount}

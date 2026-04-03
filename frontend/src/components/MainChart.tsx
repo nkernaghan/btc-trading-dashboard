@@ -17,37 +17,37 @@ export default function MainChart() {
 
     const chart = createChart(containerRef.current, {
       layout: {
-        background: { type: ColorType.Solid, color: '#0c0e13' },
-        textColor: '#535868',
-        fontFamily: "'IBM Plex Mono', 'SF Mono', monospace",
-        fontSize: 10,
+        background: { type: ColorType.Solid, color: '#131722' },
+        textColor: '#787b86',
+        fontFamily: "'Inter', sans-serif",
+        fontSize: 11,
       },
       grid: {
-        vertLines: { color: 'rgba(30, 33, 48, 0.6)', style: 0 },
-        horzLines: { color: 'rgba(30, 33, 48, 0.6)', style: 0 },
+        vertLines: { color: 'rgba(42, 46, 57, 0.6)', style: 0 },
+        horzLines: { color: 'rgba(42, 46, 57, 0.6)', style: 0 },
       },
       crosshair: {
         mode: 1,
         vertLine: {
-          color: 'rgba(74, 124, 204, 0.4)',
+          color: 'rgba(41, 98, 255, 0.4)',
           width: 1,
           style: 2,
-          labelBackgroundColor: '#1c1f28',
+          labelBackgroundColor: '#2a2e39',
         },
         horzLine: {
-          color: 'rgba(74, 124, 204, 0.4)',
+          color: 'rgba(41, 98, 255, 0.4)',
           width: 1,
           style: 2,
-          labelBackgroundColor: '#1c1f28',
+          labelBackgroundColor: '#2a2e39',
         },
       },
       rightPriceScale: {
-        borderColor: '#1e2130',
-        textColor: '#535868',
+        borderColor: '#2a2e39',
+        textColor: '#787b86',
         scaleMargins: { top: 0.08, bottom: 0.22 },
       },
       timeScale: {
-        borderColor: '#1e2130',
+        borderColor: '#2a2e39',
         timeVisible: true,
         secondsVisible: false,
         fixLeftEdge: false,
@@ -67,12 +67,12 @@ export default function MainChart() {
     });
 
     const candleSeries = chart.addSeries(CandlestickSeries, {
-      upColor: '#2d9f6f',
-      downColor: '#c74b4b',
-      borderUpColor: '#2d9f6f',
-      borderDownColor: '#c74b4b',
-      wickUpColor: 'rgba(45, 159, 111, 0.7)',
-      wickDownColor: 'rgba(199, 75, 75, 0.7)',
+      upColor: '#26a69a',
+      downColor: '#ef5350',
+      borderUpColor: '#26a69a',
+      borderDownColor: '#ef5350',
+      wickUpColor: 'rgba(38, 166, 154, 0.7)',
+      wickDownColor: 'rgba(239, 83, 80, 0.7)',
     });
 
     const volumeSeries = chart.addSeries(HistogramSeries, {
@@ -114,14 +114,14 @@ export default function MainChart() {
         time: c.time,
         value: c.volume ?? 0,
         color: c.close >= c.open
-          ? 'rgba(45, 159, 111, 0.12)'
-          : 'rgba(199, 75, 75, 0.12)',
+          ? 'rgba(38, 166, 154, 0.15)'
+          : 'rgba(239, 83, 80, 0.15)',
       })) as any
     );
   }, [candles]);
 
   return (
-    <div className="relative w-full h-full" style={{ background: '#0c0e13' }}>
+    <div className="relative w-full h-full" style={{ background: '#131722' }}>
       <div ref={containerRef} className="w-full h-full" />
     </div>
   );

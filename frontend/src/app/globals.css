@@ -2,35 +2,46 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 :root {
-  --bg-base: #0c0e13;
-  --bg-panel: #111318;
-  --bg-surface: #161921;
-  --bg-elevated: #1c1f28;
-  --bg-hover: #22252f;
-  --text-primary: #c8ccd4;
-  --text-secondary: #6b7280;
-  --text-muted: #4b5060;
-  --text-label: #535868;
-  --border-subtle: #1e2130;
-  --border-default: #252838;
-  --border-strong: #2e3244;
-  --long: #2d9f6f;
-  --long-dim: #1e6b4a;
-  --long-bg: rgba(45, 159, 111, 0.07);
-  --long-glow: rgba(45, 159, 111, 0.12);
-  --short: #c74b4b;
-  --short-dim: #8a3333;
-  --short-bg: rgba(199, 75, 75, 0.07);
-  --short-glow: rgba(199, 75, 75, 0.12);
-  --warn: #c49a3c;
-  --warn-bg: rgba(196, 154, 60, 0.08);
-  --neutral: #4b5060;
-  --accent: #4a7ccc;
-  --accent-muted: rgba(74, 124, 204, 0.15);
-  --btc: #c49a3c;
+  /* TradingView-inspired dark palette — warmer, more contrast */
+  --bg-base: #131722;
+  --bg-panel: #1e222d;
+  --bg-surface: #262b3d;
+  --bg-elevated: #2a2e39;
+  --bg-hover: #363a45;
+  --bg-header: #1a1e2e;
+
+  /* Text — higher contrast */
+  --text-primary: #d1d4dc;
+  --text-secondary: #787b86;
+  --text-muted: #5d606b;
+  --text-label: #787b86;
+  --text-bright: #e8eaed;
+
+  /* Borders — visible but not heavy */
+  --border-subtle: #2a2e39;
+  --border-default: #363a45;
+  --border-strong: #434651;
+
+  /* Signals — vibrant but professional */
+  --long: #26a69a;
+  --long-dim: #1a7a70;
+  --long-bg: rgba(38, 166, 154, 0.08);
+  --long-glow: rgba(38, 166, 154, 0.15);
+  --short: #ef5350;
+  --short-dim: #b33a38;
+  --short-bg: rgba(239, 83, 80, 0.08);
+  --short-glow: rgba(239, 83, 80, 0.15);
+  --warn: #ff9800;
+  --warn-bg: rgba(255, 152, 0, 0.08);
+  --neutral: #5d606b;
+
+  /* Accent */
+  --accent: #2962ff;
+  --accent-muted: rgba(41, 98, 255, 0.15);
+  --btc: #f0b90b;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -39,9 +50,9 @@ html, body { height: 100%; overflow: hidden; }
 body {
   background: var(--bg-base);
   color: var(--text-primary);
-  font-family: 'IBM Plex Mono', 'SF Mono', 'Cascadia Code', monospace;
-  font-size: 11px;
-  line-height: 1.45;
+  font-family: 'Inter', -apple-system, 'Segoe UI', sans-serif;
+  font-size: 12px;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -65,7 +76,7 @@ body {
 }
 
 .terminal-left {
-  width: 200px;
+  width: 220px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -94,7 +105,7 @@ body {
 }
 
 .terminal-right {
-  width: 264px;
+  width: 280px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -115,7 +126,7 @@ body {
 
 /* ─── Scrollbars ────────────────────────────────────────────────────────── */
 
-::-webkit-scrollbar { width: 3px; height: 3px; }
+::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
@@ -124,11 +135,18 @@ body {
 /* ─── Panel Helpers ─────────────────────────────────────────────────────── */
 
 .panel-label {
-  font-family: 'IBM Plex Sans', system-ui, sans-serif;
-  font-size: 9px;
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.03em;
   text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.panel-sublabel {
+  font-family: 'Inter', sans-serif;
+  font-size: 10px;
+  font-weight: 500;
   color: var(--text-muted);
 }
 
@@ -146,21 +164,22 @@ body {
 /* ─── Data Typography ───────────────────────────────────────────────────── */
 
 .data-value {
+  font-family: 'JetBrains Mono', 'SF Mono', monospace;
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum";
 }
 
 .data-label {
-  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-family: 'Inter', sans-serif;
   color: var(--text-secondary);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 /* ─── Vote Dot ──────────────────────────────────────────────────────────── */
 
 .vote-dot {
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   flex-shrink: 0;
 }
@@ -168,7 +187,7 @@ body {
 /* ─── Strength Bar ──────────────────────────────────────────────────────── */
 
 .strength-pip {
-  width: 4px;
+  width: 3px;
   height: 8px;
   border-radius: 1px;
 }
@@ -176,31 +195,50 @@ body {
 /* ─── Signal Score Glow ─────────────────────────────────────────────────── */
 
 .score-glow-long {
-  box-shadow: 0 0 40px rgba(45, 159, 111, 0.08), inset 0 1px 0 rgba(45, 159, 111, 0.1);
+  background: linear-gradient(180deg, rgba(38, 166, 154, 0.06) 0%, transparent 100%);
 }
 
 .score-glow-short {
-  box-shadow: 0 0 40px rgba(199, 75, 75, 0.08), inset 0 1px 0 rgba(199, 75, 75, 0.1);
-}
-
-/* ─── Tab Underline Active ──────────────────────────────────────────────── */
-
-.tab-active-line {
-  position: relative;
-}
-
-.tab-active-line::after {
-  content: '';
-  position: absolute;
-  bottom: -1px;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: var(--accent);
+  background: linear-gradient(180deg, rgba(239, 83, 80, 0.06) 0%, transparent 100%);
 }
 
 /* ─── Row Hover ─────────────────────────────────────────────────────────── */
 
+.row-hover {
+  transition: background-color 0.1s ease;
+}
+
 .row-hover:hover {
-  background: var(--bg-elevated);
+  background: var(--bg-hover);
+}
+
+/* ─── Badges ───────────────────────────────────────────────────────────── */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
+  letter-spacing: 0.04em;
+}
+
+.badge-long {
+  color: var(--long);
+  background: var(--long-bg);
+  border: 1px solid rgba(38, 166, 154, 0.2);
+}
+
+.badge-short {
+  color: var(--short);
+  background: var(--short-bg);
+  border: 1px solid rgba(239, 83, 80, 0.2);
+}
+
+.badge-neutral {
+  color: var(--text-muted);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
 }

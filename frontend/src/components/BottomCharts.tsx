@@ -71,7 +71,7 @@ function FearGreedArc({ value }: { value: number }) {
       </div>
       <div
         className="text-[9px] font-medium mt-0.5"
-        style={{ color, fontFamily: 'IBM Plex Sans, sans-serif', letterSpacing: '0.05em' }}
+        style={{ color, fontFamily: 'Inter, sans-serif', letterSpacing: '0.05em' }}
       >
         {label}
       </div>
@@ -125,7 +125,7 @@ export default function BottomCharts() {
               style={{
                 color: active ? COLORS.accent : COLORS.textMuted,
                 background: active ? 'rgba(74,124,204,0.06)' : 'transparent',
-                fontFamily: 'IBM Plex Sans, sans-serif',
+                fontFamily: 'Inter, sans-serif',
                 letterSpacing: '0.04em',
                 borderRight: `1px solid ${COLORS.border}`,
               }}
@@ -225,7 +225,7 @@ export default function BottomCharts() {
               </div>
               <div
                 className="text-[9px] mt-1.5"
-                style={{ color: COLORS.textSecondary, fontFamily: 'IBM Plex Sans, sans-serif' }}
+                style={{ color: COLORS.textSecondary, fontFamily: 'Inter, sans-serif' }}
               >
                 {(fundingRate ?? 0) > 0
                   ? 'Longs paying shorts — market overbought'
@@ -281,7 +281,7 @@ export default function BottomCharts() {
                 className="text-[11px] font-semibold"
                 style={{
                   color: (oiDelta ?? 0) > 2 ? COLORS.long : (oiDelta ?? 0) < -2 ? COLORS.short : COLORS.textSecondary,
-                  fontFamily: 'IBM Plex Sans, sans-serif',
+                  fontFamily: 'Inter, sans-serif',
                 }}
               >
                 {(oiDelta ?? 0) > 2 ? 'Rising — conviction' : (oiDelta ?? 0) < -2 ? 'Falling — unwinding' : 'Stable'}
@@ -304,7 +304,7 @@ export default function BottomCharts() {
                     className="flex-shrink-0 text-[9px] font-semibold uppercase pt-px"
                     style={{
                       color: COLORS.accent,
-                      fontFamily: 'IBM Plex Sans, sans-serif',
+                      fontFamily: 'Inter, sans-serif',
                       letterSpacing: '0.04em',
                       minWidth: 50,
                     }}

@@ -41,7 +41,7 @@ export default function TopBar() {
             />
             <span
               className="text-[10px] font-semibold tracking-widest uppercase"
-              style={{ color: COLORS.btc, fontFamily: 'IBM Plex Sans, sans-serif' }}
+              style={{ color: COLORS.btc, fontFamily: 'Inter, sans-serif' }}
             >
               BTC-PERP
             </span>
@@ -101,7 +101,7 @@ export default function TopBar() {
                 background: active ? 'rgba(74,124,204,0.15)' : 'transparent',
                 color: active ? COLORS.accent : COLORS.textMuted,
                 border: active ? `1px solid rgba(74,124,204,0.3)` : '1px solid transparent',
-                fontFamily: 'IBM Plex Sans, sans-serif',
+                fontFamily: 'Inter, sans-serif',
                 letterSpacing: '0.05em',
               }}
             >

@@ -127,7 +127,7 @@ export default function SignalPanel() {
             style={{
               color: dirColor,
               background: `${dirColor}15`,
-              fontFamily: 'IBM Plex Sans, sans-serif',
+              fontFamily: 'Inter, sans-serif',
               letterSpacing: '0.15em',
             }}
           >
@@ -156,7 +156,7 @@ export default function SignalPanel() {
                 style={{
                   color: strength === 'STRONG' ? dirColor : COLORS.textMuted,
                   background: strength === 'STRONG' ? `${dirColor}15` : COLORS.surface,
-                  fontFamily: 'IBM Plex Sans, sans-serif',
+                  fontFamily: 'Inter, sans-serif',
                   letterSpacing: '0.08em',
                 }}
               >
@@ -250,7 +250,7 @@ export default function SignalPanel() {
                   className="text-[9px] font-semibold"
                   style={{
                     color: VOTE_COLORS[v.vote] ?? COLORS.neutral,
-                    fontFamily: 'IBM Plex Sans, sans-serif',
+                    fontFamily: 'Inter, sans-serif',
                     letterSpacing: '0.04em',
                   }}
                 >

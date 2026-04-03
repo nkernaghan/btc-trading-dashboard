@@ -46,7 +46,7 @@ export default function PositionTracker() {
             style={{
               color: dirColor,
               background: `${dirColor}15`,
-              fontFamily: 'IBM Plex Sans, sans-serif',
+              fontFamily: 'Inter, sans-serif',
               letterSpacing: '0.06em',
             }}
           >
