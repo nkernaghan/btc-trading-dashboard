@@ -244,9 +244,22 @@ export default function MainChart() {
       visible: DEFAULT_INDICATORS.vwap,
     });
 
-    // Halving markers — we use setMarkers on the candle series instead of
-    // separate line series. No dummy series needed.
-    const hSeriesArr: ISeriesApi<'Line'>[] = []; // kept empty for ref compat
+    // Halving marker series — one per halving, shows as a colored dot on the chart
+    const hSeriesArr: ISeriesApi<'Line'>[] = [];
+    for (const hv of HALVING_DATES) {
+      const hvSeries = chart.addSeries(LineSeries, {
+        color: '#7c3aed',
+        lineWidth: 2,
+        pointMarkersVisible: true,
+        pointMarkersRadius: 5,
+        priceLineVisible: false,
+        lastValueVisible: true,
+        crosshairMarkerVisible: true,
+        visible: DEFAULT_INDICATORS.halving,
+        title: hv.label,
+      } as any);
+      hSeriesArr.push(hvSeries);
+    }
 
     // 4Y cycle background shading — two LineSeries (upper / lower boundary)
     // per bull phase rendered as a shaded area via repeated baseline approach.
@@ -365,31 +378,33 @@ export default function MainChart() {
     const firstTime = times[0];
     const lastTime  = times[times.length - 1];
 
-    // Halving markers — add markers to the candle series at halving dates
-    if (indicators.halving && candleRef.current) {
-      const halvingMarkers = HALVING_DATES
-        .filter((hv) => hv.time >= firstTime && hv.time <= lastTime + SECONDS_PER_DAY * 365)
-        .map((hv) => {
-          // Find closest candle time
-          let closestTime = times[0];
-          let minDist = Infinity;
-          for (const t of times) {
-            const dist = Math.abs(t - hv.time);
-            if (dist < minDist) { minDist = dist; closestTime = t; }
-          }
-          return {
-            time: closestTime as any,
-            position: 'belowBar' as const,
-            color: '#7c3aed',
-            shape: 'arrowUp' as const,
-            text: `${hv.label} HALVING`,
-          };
-        })
-        .sort((a: any, b: any) => a.time - b.time);
-      (candleRef.current as any).setMarkers(halvingMarkers);
-    } else if (candleRef.current) {
-      (candleRef.current as any).setMarkers([]);
-    }
+    // Halving markers — use dedicated halving line series
+    // Each halving gets a single-point line series that we already created.
+    // We draw a visible price line at the halving date's price level.
+    HALVING_DATES.forEach((hv, idx) => {
+      const series = halvingSeriesRefs.current[idx];
+      if (!series) return;
+
+      const t = hv.time;
+      if (t < firstTime - SECONDS_PER_DAY * 30 || t > lastTime + SECONDS_PER_DAY * 30) {
+        series.setData([]);
+        return;
+      }
+
+      // Find closest candle
+      let closestIdx = 0;
+      let minDist = Infinity;
+      for (let i = 0; i < times.length; i++) {
+        if (Math.abs(times[i] - t) < minDist) {
+          minDist = Math.abs(times[i] - t);
+          closestIdx = i;
+        }
+      }
+
+      // Set a single point at the halving candle's close price
+      const halvingPrice = dedupedCandles[closestIdx]?.close ?? (priceMin + priceMax) / 2;
+      series.setData([{ time: times[closestIdx] as any, value: halvingPrice }]);
+    });
 
     // 4Y Cycle shading — draw upper/lower boundary lines for each bull phase
     for (let i = 0; i < HALVING_DATES.length - 1; i++) {
@@ -432,8 +447,9 @@ export default function MainChart() {
 
     vwapRef.current?.applyOptions({ visible: indicators.vwap });
 
-    // Halving markers are set in the candle data useEffect, not here
-    // (they use setMarkers on the candle series, not separate series)
+    halvingSeriesRefs.current.forEach((s) => {
+      if (s) s.applyOptions({ visible: indicators.halving });
+    });
 
     cycleSeriesRefs.current.forEach((s) =>
       s.applyOptions({ visible: indicators.cycle4y })
