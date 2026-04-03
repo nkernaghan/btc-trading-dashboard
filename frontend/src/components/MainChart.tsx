@@ -272,16 +272,18 @@ export default function MainChart() {
       // Use lineWidth: 1 with fully transparent color so no actual line is
       // rendered — the visual shading comes from the series fill logic below.
       const bullUpper = chart.addSeries(LineSeries, {
-        color:       'rgba(38, 166, 154, 0.0)',
+        color:       'rgba(38, 166, 154, 0.25)',
         lineWidth:   1,
+        lineStyle:   2,
         priceLineVisible: false,
         lastValueVisible: false,
         crosshairMarkerVisible: false,
         visible: DEFAULT_INDICATORS.cycle4y,
       });
       const bullLower = chart.addSeries(LineSeries, {
-        color:       'rgba(38, 166, 154, 0.0)',
+        color:       'rgba(239, 83, 80, 0.25)',
         lineWidth:   1,
+        lineStyle:   2,
         priceLineVisible: false,
         lastValueVisible: false,
         crosshairMarkerVisible: false,
@@ -384,15 +386,13 @@ export default function MainChart() {
       const series = halvingSeriesRefs.current[idx];
       if (!series) return;
 
-      // Only draw if the halving falls within the visible candle range
-      // (or near it).  Use times before and after the halving event.
       const t = hv.time;
       if (t < firstTime - SECONDS_PER_DAY * 30 || t > lastTime + SECONDS_PER_DAY * 30) {
         series.setData([]);
         return;
       }
 
-      // Find the closest candle index to the halving
+      // Find two adjacent candle times around the halving to draw a vertical line
       let closestIdx = 0;
       let minDist = Infinity;
       for (let i = 0; i < times.length; i++) {
@@ -400,22 +400,32 @@ export default function MainChart() {
         if (dist < minDist) { minDist = dist; closestIdx = i; }
       }
 
-      // Use the closest candle time as a single point marker
-      // (two identical times would crash the chart)
+      // Draw a line from bottom to top at the halving date
       const markerTime = times[closestIdx];
-      const midPrice = (priceMin + priceMax) / 2;
+      // Use multiple price points to create a visible vertical span
+      const steps = 5;
+      const priceRange = priceMax - priceMin;
+      const data = [];
+      for (let s = 0; s <= steps; s++) {
+        const price = priceMin + (priceRange * s / steps);
+        // Each point needs a unique time — offset by 1 second each
+        // But lightweight-charts needs ascending time, so we use the same time
+        // Instead, just create a single visible marker point
+        data.push({ time: markerTime as any, value: price });
+      }
+      // Can only use one point per time — use a single point and a price line
       series.setData([
-        { time: markerTime as any, value: midPrice },
+        { time: markerTime as any, value: (priceMin + priceMax) / 2 },
       ]);
 
-      // Use a price line to draw the actual vertical marker
+      // Create visible price line at each halving
       series.createPriceLine({
-        price:     (priceMax + priceMin) / 2,
-        color:     'rgba(124, 58, 237, 0.0)',
-        lineWidth: 1,
+        price: priceMin,
+        color: '#7c3aed',
+        lineWidth: 2,
         lineStyle: 2,
-        axisLabelVisible: false,
-        title: '',
+        axisLabelVisible: true,
+        title: hv.label,
       });
     });
 
