@@ -2,40 +2,46 @@
 @tailwind components;
 @tailwind utilities;
 
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+
 :root {
-  --bg-primary: #0a0a14;
-  --bg-secondary: #12122a;
-  --bg-tertiary: #1a1a2e;
-  --text-primary: #e0e0e0;
-  --text-secondary: #888;
-  --accent-green: #00ff88;
-  --accent-red: #ff4444;
-  --accent-orange: #ff8800;
-  --accent-blue: #4488ff;
-  --border: #2a2a4a;
-  --btc-orange: #f7931a;
+  --bg-base: #0c0e13;
+  --bg-panel: #111318;
+  --bg-surface: #161921;
+  --bg-elevated: #1c1f28;
+  --bg-hover: #22252f;
+  --text-primary: #c8ccd4;
+  --text-secondary: #6b7280;
+  --text-muted: #4b5060;
+  --text-label: #535868;
+  --border-subtle: #1e2130;
+  --border-default: #252838;
+  --border-strong: #2e3244;
+  --long: #2d9f6f;
+  --long-bg: rgba(45, 159, 111, 0.08);
+  --short: #c74b4b;
+  --short-bg: rgba(199, 75, 75, 0.08);
+  --warn: #c49a3c;
+  --warn-bg: rgba(196, 154, 60, 0.08);
+  --neutral: #4b5060;
+  --accent: #4a7ccc;
+  --accent-muted: #354d73;
+  --btc: #c49a3c;
 }
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
 
 body {
-  background: var(--bg-primary);
+  background: var(--bg-base);
   color: var(--text-primary);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'IBM Plex Mono', 'SF Mono', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
 
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--border) var(--bg-primary);
-}
-
-::-webkit-scrollbar {
-  width: 6px;
-}
-
-::-webkit-scrollbar-track {
-  background: var(--bg-primary);
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 3px;
-}
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 2px; }
+::selection { background: var(--accent-muted); color: var(--text-primary); }

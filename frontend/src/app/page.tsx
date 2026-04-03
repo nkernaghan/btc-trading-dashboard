@@ -14,32 +14,21 @@ export default function Dashboard() {
   usePollingData();
 
   return (
-    <div className="h-screen w-screen flex flex-col overflow-hidden">
-      {/* Top bar */}
+    <div className="h-screen w-screen flex flex-col overflow-hidden" style={{ background: '#0c0e13' }}>
       <TopBar />
-
-      {/* Main content area */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Left: Indicator Panel */}
-        <div className="w-[200px] flex-shrink-0">
+        <div className="w-[180px] flex-shrink-0">
           <IndicatorPanel />
         </div>
-
-        {/* Center: Chart + Bottom */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Main chart */}
           <div className="flex-1 overflow-hidden">
             <MainChart />
           </div>
-
-          {/* Bottom charts strip */}
-          <div className="h-[160px] flex-shrink-0">
+          <div className="h-[130px] flex-shrink-0">
             <BottomCharts />
           </div>
         </div>
-
-        {/* Right: Signal + Position */}
-        <div className="w-[260px] flex-shrink-0 flex flex-col">
+        <div className="w-[240px] flex-shrink-0 flex flex-col">
           <div className="flex-1 overflow-hidden">
             <SignalPanel />
           </div>

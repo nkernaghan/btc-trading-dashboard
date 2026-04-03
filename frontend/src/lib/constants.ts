@@ -4,22 +4,24 @@ export const API_BASE = 'http://localhost:8000';
 export const WS_URL = 'ws://localhost:8000/ws';
 
 export const COLORS = {
-  bgPrimary: '#0a0a14',
-  bgSecondary: '#12122a',
-  bgTertiary: '#1a1a2e',
-  textPrimary: '#e0e0e0',
-  textSecondary: '#888',
-  green: '#00ff88',
-  red: '#ff4444',
-  orange: '#ff8800',
-  blue: '#4488ff',
-  border: '#2a2a4a',
-  btcOrange: '#f7931a',
+  long: '#2d9f6f',
+  short: '#c74b4b',
+  warn: '#c49a3c',
+  neutral: '#4b5060',
+  accent: '#4a7ccc',
+  text: '#c8ccd4',
+  textSecondary: '#6b7280',
+  textMuted: '#4b5060',
+  border: '#252838',
+  panel: '#111318',
+  surface: '#161921',
+  base: '#0c0e13',
+  btc: '#c49a3c',
 };
 
 export const CATEGORY_LABELS: Record<string, string> = {
   ORDER_FLOW: 'Order Flow',
-  MACRO_DERIVATIVES: 'Macro / Derivatives',
+  MACRO_DERIVATIVES: 'Macro',
   ON_CHAIN: 'On-Chain',
   SENTIMENT: 'Sentiment',
   TECHNICAL: 'Technical',
@@ -27,10 +29,10 @@ export const CATEGORY_LABELS: Record<string, string> = {
 };
 
 export const VOTE_COLORS: Record<string, string> = {
-  BULL: '#00ff88',
-  BEAR: '#ff4444',
-  NEUTRAL: '#888888',
-  WARN: '#ff8800',
+  BULL: '#2d9f6f',
+  BEAR: '#c74b4b',
+  NEUTRAL: '#4b5060',
+  WARN: '#c49a3c',
 };
 
 export const TIMEFRAMES: Timeframe[] = ['1H', '4H', '1D', '1W'];

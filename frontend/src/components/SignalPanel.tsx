@@ -1,98 +1,86 @@
 'use client';
 
 import { useDashboardStore } from '@/stores/dashboard';
-import { VOTE_COLORS } from '@/lib/constants';
+import { VOTE_COLORS, COLORS } from '@/lib/constants';
 import { formatPrice } from '@/lib/format';
 
 export default function SignalPanel() {
   const { signal, votes, warnings } = useDashboardStore();
 
-  const directionColor =
-    signal?.direction === 'LONG'
-      ? 'text-[#00ff88]'
-      : signal?.direction === 'SHORT'
-      ? 'text-[#ff4444]'
-      : 'text-[#888]';
-
-  const scoreColor =
-    signal?.direction === 'LONG'
-      ? '#00ff88'
-      : signal?.direction === 'SHORT'
-      ? '#ff4444'
-      : '#888';
+  const direction = signal?.direction ?? 'WAIT';
+  const score = signal?.composite_score ?? 0;
+  const dirColor = direction === 'LONG' ? COLORS.long : direction === 'SHORT' ? COLORS.short : COLORS.neutral;
+  const dirBg = direction === 'LONG' ? 'rgba(45,159,111,0.06)' : direction === 'SHORT' ? 'rgba(199,75,75,0.06)' : 'transparent';
 
   return (
-    <div className="flex flex-col h-full overflow-y-auto bg-[#12122a] border-l border-[#2a2a4a] p-3">
-      <h2 className="text-xs text-[#888] uppercase tracking-wider mb-3">Signal</h2>
+    <div className="flex flex-col h-full overflow-y-auto p-3" style={{ background: COLORS.panel, borderLeft: `1px solid ${COLORS.border}` }}>
+      <div className="text-[10px] font-medium tracking-widest uppercase mb-3" style={{ color: COLORS.textMuted, fontFamily: 'IBM Plex Sans, sans-serif' }}>
+        Signal
+      </div>
 
-      {/* Composite Score */}
-      <div className="text-center mb-4">
-        <div className="text-4xl font-bold" style={{ color: scoreColor }}>
-          {signal ? (signal.composite_score ?? 0).toFixed(1) : '--'}
+      {/* Score */}
+      <div className="text-center mb-4 py-3 rounded" style={{ background: dirBg }}>
+        <div className="text-[28px] font-semibold" style={{ color: dirColor, fontVariantNumeric: 'tabular-nums' }}>
+          {score > 0 ? score.toFixed(1) : '--'}
         </div>
-        <div className={`text-lg font-bold ${directionColor}`}>
-          {signal?.direction || 'WAIT'}
+        <div className="text-[13px] font-semibold tracking-wider" style={{ color: dirColor }}>
+          {direction}
         </div>
-        <div className="text-xs text-[#888] mt-1">
-          {signal ? `${signal.confluence_count ?? signal.confluence ?? 0}/3 confluence` : '--'}
-        </div>
-        <div className="text-xs text-[#888]">
-          Strength: {signal?.strength || '--'}
+        <div className="text-[10px] mt-1" style={{ color: COLORS.textMuted }}>
+          {signal ? `${signal.confluence_count ?? 0}/3 confluence` : '--'}
+          {signal?.strength ? ` \u00B7 ${signal.strength}` : ''}
         </div>
       </div>
 
-      {/* Trade Recommendation */}
-      {signal && signal.direction !== 'WAIT' && (
-        <div className="border border-[#2a2a4a] rounded p-2 mb-4 text-xs">
-          <div className="text-[#888] uppercase tracking-wider mb-2">Trade Setup</div>
-          <div className="grid grid-cols-2 gap-1">
-            <span className="text-[#888]">Entry:</span>
-            <span>{formatPrice(signal.entry_low ?? signal.entry ?? 0)}</span>
-            <span className="text-[#888]">SL:</span>
-            <span className="text-[#ff4444]">{formatPrice(signal.stop_loss)}</span>
-            <span className="text-[#888]">TP1:</span>
-            <span className="text-[#00ff88]">{formatPrice(signal.take_profit_1)}</span>
-            <span className="text-[#888]">TP2:</span>
-            <span className="text-[#00ff88]">{formatPrice(signal.take_profit_2)}</span>
-            <span className="text-[#888]">Leverage:</span>
-            <span>{signal.recommended_leverage ?? signal.leverage ?? 0}x</span>
-            <span className="text-[#888]">Liq:</span>
-            <span className="text-[#ff8800]">{formatPrice(signal.liquidation_price)}</span>
-            <span className="text-[#888]">R:R:</span>
-            <span className="text-[#4488ff]">{(signal.risk_reward_ratio ?? signal.risk_reward ?? 0).toFixed(2)}</span>
+      {/* Trade Setup */}
+      {signal && direction !== 'WAIT' && (
+        <div className="mb-4 py-2 px-2 rounded" style={{ border: `1px solid ${COLORS.border}`, background: COLORS.surface }}>
+          <div className="text-[10px] font-medium tracking-widest uppercase mb-2" style={{ color: COLORS.textMuted, fontFamily: 'IBM Plex Sans, sans-serif' }}>
+            Setup
+          </div>
+          <div className="space-y-1 text-[11px]" style={{ fontVariantNumeric: 'tabular-nums' }}>
+            {[
+              ['Entry', formatPrice(signal.entry_low ?? 0), COLORS.text],
+              ['Stop', formatPrice(signal.stop_loss ?? 0), COLORS.short],
+              ['TP1', formatPrice(signal.take_profit_1 ?? 0), COLORS.long],
+              ['TP2', formatPrice(signal.take_profit_2 ?? 0), COLORS.long],
+              ['Leverage', `${signal.recommended_leverage ?? 0}x`, COLORS.text],
+              ['Liq', formatPrice(signal.liquidation_price ?? 0), COLORS.warn],
+              ['R:R', `${(signal.risk_reward_ratio ?? 0).toFixed(2)}`, COLORS.accent],
+            ].map(([label, value, color]) => (
+              <div key={label as string} className="flex justify-between">
+                <span style={{ color: COLORS.textSecondary }}>{label}</span>
+                <span style={{ color: color as string }}>{value}</span>
+              </div>
+            ))}
           </div>
         </div>
       )}
 
-      {/* Indicator Votes */}
+      {/* Votes */}
       <div className="mb-4">
-        <div className="text-xs text-[#888] uppercase tracking-wider mb-2">Votes</div>
-        <div className="space-y-1">
-          {(votes.length > 0 ? votes : signal?.votes || []).map((v, i) => (
-            <div key={i} className="flex items-center gap-2 text-xs">
-              <span
-                className="w-2 h-2 rounded-full flex-shrink-0"
-                style={{ backgroundColor: VOTE_COLORS[v.vote] }}
-              />
-              <span className="text-[#888] truncate flex-1">{v.name}</span>
-              <span style={{ color: VOTE_COLORS[v.vote] }}>{v.vote.replace('_', ' ')}</span>
+        <div className="text-[10px] font-medium tracking-widest uppercase mb-2" style={{ color: COLORS.textMuted, fontFamily: 'IBM Plex Sans, sans-serif' }}>
+          Votes
+        </div>
+        <div className="space-y-0.5">
+          {(votes.length > 0 ? votes : signal?.votes ?? []).map((v, i) => (
+            <div key={i} className="flex items-center justify-between text-[10px] py-0.5">
+              <span style={{ color: COLORS.textSecondary }}>{v.name}</span>
+              <span className="font-medium" style={{ color: VOTE_COLORS[v.vote] ?? COLORS.neutral }}>{v.vote}</span>
             </div>
           ))}
+          {votes.length === 0 && !signal?.votes?.length && (
+            <div className="text-[10px]" style={{ color: COLORS.textMuted }}>Awaiting data...</div>
+          )}
         </div>
       </div>
 
       {/* Warnings */}
       {warnings.length > 0 && (
-        <div>
-          <div className="text-xs text-[#ff8800] uppercase tracking-wider mb-2">Warnings</div>
-          <div className="space-y-1">
-            {warnings.map((w, i) => (
-              <div key={i} className="text-xs text-[#ff8800] flex items-start gap-1">
-                <span className="flex-shrink-0">!</span>
-                <span>{w}</span>
-              </div>
-            ))}
-          </div>
+        <div className="mt-auto pt-2" style={{ borderTop: `1px solid ${COLORS.border}` }}>
+          {warnings.map((w, i) => (
+            <div key={i} className="text-[10px] py-0.5" style={{ color: COLORS.warn }}>{w}</div>
+          ))}
         </div>
       )}
     </div>
