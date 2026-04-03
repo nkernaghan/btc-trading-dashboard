@@ -37,13 +37,13 @@ export function getSession(): Session {
   return 'NEW_YORK';
 }
 
-export function getSessionEmoji(session?: Session): string {
+export function getSessionLabel(session?: Session): string {
   const s = session || getSession();
   switch (s) {
-    case 'ASIA': return '🌏';
-    case 'LONDON': return '🇬🇧';
-    case 'NEW_YORK': return '🇺🇸';
-    case 'OVERLAP': return '🔄';
-    default: return '🌐';
+    case 'ASIA': return 'ASIA';
+    case 'LONDON': return 'LDN';
+    case 'NEW_YORK': return 'NYC';
+    case 'OVERLAP': return 'OVL';
+    default: return 'GLOBAL';
   }
 }

@@ -18,14 +18,18 @@
   --border-default: #252838;
   --border-strong: #2e3244;
   --long: #2d9f6f;
-  --long-bg: rgba(45, 159, 111, 0.08);
+  --long-dim: #1e6b4a;
+  --long-bg: rgba(45, 159, 111, 0.07);
+  --long-glow: rgba(45, 159, 111, 0.12);
   --short: #c74b4b;
-  --short-bg: rgba(199, 75, 75, 0.08);
+  --short-dim: #8a3333;
+  --short-bg: rgba(199, 75, 75, 0.07);
+  --short-glow: rgba(199, 75, 75, 0.12);
   --warn: #c49a3c;
   --warn-bg: rgba(196, 154, 60, 0.08);
   --neutral: #4b5060;
   --accent: #4a7ccc;
-  --accent-muted: #354d73;
+  --accent-muted: rgba(74, 124, 204, 0.15);
   --btc: #c49a3c;
 }
 
@@ -35,13 +39,168 @@ html, body { height: 100%; overflow: hidden; }
 body {
   background: var(--bg-base);
   color: var(--text-primary);
-  font-family: 'IBM Plex Mono', 'SF Mono', monospace;
-  font-size: 12px;
-  line-height: 1.5;
+  font-family: 'IBM Plex Mono', 'SF Mono', 'Cascadia Code', monospace;
+  font-size: 11px;
+  line-height: 1.45;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-::-webkit-scrollbar { width: 4px; }
+/* ─── Terminal Layout ──────────────────────────────────────────────────── */
+
+.terminal-root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  background: var(--bg-base);
+}
+
+.terminal-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.terminal-left {
+  width: 200px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border-default);
+  overflow: hidden;
+}
+
+.terminal-center {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.terminal-chart {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.terminal-bottom {
+  height: 148px;
+  flex-shrink: 0;
+  border-top: 1px solid var(--border-default);
+}
+
+.terminal-right {
+  width: 264px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--border-default);
+  overflow: hidden;
+}
+
+.terminal-signal {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.terminal-position {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border-default);
+}
+
+/* ─── Scrollbars ────────────────────────────────────────────────────────── */
+
+::-webkit-scrollbar { width: 3px; height: 3px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 2px; }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 ::selection { background: var(--accent-muted); color: var(--text-primary); }
+
+/* ─── Panel Helpers ─────────────────────────────────────────────────────── */
+
+.panel-label {
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.panel-divider {
+  height: 1px;
+  background: var(--border-default);
+}
+
+.panel-divider-v {
+  width: 1px;
+  background: var(--border-default);
+  align-self: stretch;
+}
+
+/* ─── Data Typography ───────────────────────────────────────────────────── */
+
+.data-value {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+.data-label {
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+
+/* ─── Vote Dot ──────────────────────────────────────────────────────────── */
+
+.vote-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ─── Strength Bar ──────────────────────────────────────────────────────── */
+
+.strength-pip {
+  width: 4px;
+  height: 8px;
+  border-radius: 1px;
+}
+
+/* ─── Signal Score Glow ─────────────────────────────────────────────────── */
+
+.score-glow-long {
+  box-shadow: 0 0 40px rgba(45, 159, 111, 0.08), inset 0 1px 0 rgba(45, 159, 111, 0.1);
+}
+
+.score-glow-short {
+  box-shadow: 0 0 40px rgba(199, 75, 75, 0.08), inset 0 1px 0 rgba(199, 75, 75, 0.1);
+}
+
+/* ─── Tab Underline Active ──────────────────────────────────────────────── */
+
+.tab-active-line {
+  position: relative;
+}
+
+.tab-active-line::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--accent);
+}
+
+/* ─── Row Hover ─────────────────────────────────────────────────────────── */
+
+.row-hover:hover {
+  background: var(--bg-elevated);
+}
