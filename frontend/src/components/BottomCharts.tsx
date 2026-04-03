@@ -4,21 +4,22 @@ import { useState } from 'react';
 import { useDashboardStore } from '@/stores/dashboard';
 import { formatFunding, formatCompact, formatPct } from '@/lib/format';
 import { COLORS } from '@/lib/constants';
+import { calcVolumeProfile, calcLiquidationLevels } from '@/lib/indicators';
 
-const TABS = ['Macro', 'Sentiment', 'Funding', 'OI', 'News'] as const;
+const TABS = ['Macro', 'Sentiment', 'Funding', 'OI', 'Vol Profile', 'Liq Levels', 'News'] as const;
 type Tab = typeof TABS[number];
 
 const MACRO_LABELS: Record<string, string> = {
-  DXY: 'DXY',
-  SPX: 'SPX',
-  NQ: 'NQ',
-  US10Y: 'US10Y',
-  GOLD: 'Gold',
-  BTC_DOM: 'BTC.D',
+  DXY:    'DXY',
+  SPX:    'SPX',
+  NQ:     'NQ',
+  US10Y:  'US10Y',
+  GOLD:   'Gold',
+  BTC_DOM:'BTC.D',
 };
 
 function MacroCell({ label, price, changePct }: { label: string; price: number; changePct: number }) {
-  const positive = changePct >= 0;
+  const positive    = changePct >= 0;
   const changeColor = positive ? COLORS.long : COLORS.short;
 
   return (
@@ -35,10 +36,7 @@ function MacroCell({ label, price, changePct }: { label: string; price: number; 
       >
         {price?.toLocaleString(undefined, { maximumFractionDigits: 2 }) ?? '--'}
       </div>
-      <div
-        className="data-value text-[9px] font-medium"
-        style={{ color: changeColor }}
-      >
+      <div className="data-value text-[9px] font-medium" style={{ color: changeColor }}>
         {positive ? '+' : ''}{formatPct(changePct)}
       </div>
     </div>
@@ -75,7 +73,6 @@ function FearGreedArc({ value }: { value: number }) {
       >
         {label}
       </div>
-      {/* Mini bar */}
       <div
         className="mt-2 rounded-full overflow-hidden"
         style={{ width: 80, height: 3, background: COLORS.border }}
@@ -89,14 +86,262 @@ function FearGreedArc({ value }: { value: number }) {
   );
 }
 
+// ─── Volume Profile panel ──────────────────────────────────────────────────
+function VolumeProfilePanel() {
+  const { candles } = useDashboardStore();
+
+  if (candles.length === 0) {
+    return (
+      <div className="flex items-center px-4 h-full text-[10px]" style={{ color: COLORS.textMuted }}>
+        Loading candle data...
+      </div>
+    );
+  }
+
+  const buckets = calcVolumeProfile(candles, 20);
+  const maxVol  = Math.max(...buckets.map((b) => b.volume));
+
+  // Sort descending by price so the highest price is at the top
+  const sorted = [...buckets].reverse();
+
+  return (
+    <div
+      className="flex gap-3 h-full overflow-hidden px-3 py-2"
+      style={{ alignItems: 'stretch' }}
+    >
+      {/* Bar chart */}
+      <div className="flex flex-col justify-between flex-1 gap-px overflow-hidden" style={{ minWidth: 0 }}>
+        {sorted.map((bucket, i) => {
+          const barPct = maxVol > 0 ? (bucket.volume / maxVol) * 100 : 0;
+          return (
+            <div
+              key={i}
+              className="flex items-center gap-1.5 flex-1"
+              style={{ minHeight: 0 }}
+            >
+              {/* Price label */}
+              <div
+                className="flex-shrink-0 text-right"
+                style={{
+                  width:      62,
+                  fontSize:   8,
+                  fontFamily: 'Inter, sans-serif',
+                  color:      bucket.isPoc ? COLORS.btc : COLORS.textSecondary,
+                  fontWeight: bucket.isPoc ? 700 : 400,
+                  lineHeight: 1,
+                }}
+              >
+                {bucket.priceMid.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+              </div>
+
+              {/* Bar */}
+              <div
+                className="flex-1 rounded-sm overflow-hidden"
+                style={{ height: '70%', background: COLORS.borderSubtle, minWidth: 0 }}
+              >
+                <div
+                  className="h-full rounded-sm transition-all duration-300"
+                  style={{
+                    width:      `${barPct}%`,
+                    background: bucket.isPoc
+                      ? COLORS.btc
+                      : `rgba(41, 98, 255, 0.35)`,
+                  }}
+                />
+              </div>
+
+              {/* POC label */}
+              {bucket.isPoc && (
+                <div
+                  className="flex-shrink-0"
+                  style={{
+                    fontSize:    8,
+                    fontFamily:  'Inter, sans-serif',
+                    color:       COLORS.btc,
+                    fontWeight:  700,
+                    letterSpacing: '0.04em',
+                  }}
+                >
+                  POC
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Legend */}
+      <div
+        className="flex flex-col justify-center gap-1.5 flex-shrink-0"
+        style={{ borderLeft: `1px solid ${COLORS.border}`, paddingLeft: 10 }}
+      >
+        <div className="panel-label" style={{ fontSize: 8 }}>VOLUME PROFILE</div>
+        <div
+          className="text-[9px]"
+          style={{ color: COLORS.textSecondary, fontFamily: 'Inter, sans-serif', maxWidth: 80 }}
+        >
+          {candles.length} candles
+        </div>
+        <div className="flex items-center gap-1 mt-1">
+          <div
+            className="rounded-sm"
+            style={{ width: 8, height: 8, background: COLORS.btc }}
+          />
+          <div className="text-[8px]" style={{ color: COLORS.textMuted, fontFamily: 'Inter, sans-serif' }}>
+            POC
+          </div>
+        </div>
+        <div className="flex items-center gap-1">
+          <div
+            className="rounded-sm"
+            style={{ width: 8, height: 8, background: 'rgba(41, 98, 255, 0.35)' }}
+          />
+          <div className="text-[8px]" style={{ color: COLORS.textMuted, fontFamily: 'Inter, sans-serif' }}>
+            Volume
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Liquidation Levels panel ──────────────────────────────────────────────
+function LiquidationLevelsPanel() {
+  const { price } = useDashboardStore();
+
+  if (!price || price === 0) {
+    return (
+      <div className="flex items-center px-4 h-full text-[10px]" style={{ color: COLORS.textMuted }}>
+        Waiting for price data...
+      </div>
+    );
+  }
+
+  const levels = calcLiquidationLevels(price, [5, 10, 20, 25, 30, 40]);
+  const maxDistPct = Math.max(...levels.map((l) => l.shortDistancePct));
+
+  return (
+    <div className="flex h-full overflow-hidden px-3 py-2 gap-4">
+      {/* Long liquidations */}
+      <div className="flex flex-col flex-1 gap-1 overflow-hidden" style={{ minWidth: 0 }}>
+        <div
+          className="flex-shrink-0 mb-1"
+          style={{ fontSize: 8, fontFamily: 'Inter, sans-serif', color: COLORS.long, fontWeight: 700, letterSpacing: '0.05em' }}
+        >
+          LONG LIQUIDATIONS
+        </div>
+        {levels.map((lv) => {
+          const barPct = maxDistPct > 0 ? (lv.longDistancePct / maxDistPct) * 100 : 0;
+          return (
+            <div key={`long-${lv.leverage}`} className="flex items-center gap-1.5 flex-1" style={{ minHeight: 0 }}>
+              <div
+                className="flex-shrink-0 text-right font-semibold"
+                style={{ width: 22, fontSize: 9, fontFamily: 'Inter, sans-serif', color: COLORS.textSecondary }}
+              >
+                {lv.leverage}x
+              </div>
+              <div
+                className="flex-1 rounded-sm overflow-hidden"
+                style={{ height: '60%', background: COLORS.borderSubtle, minWidth: 0 }}
+              >
+                <div
+                  className="h-full rounded-sm"
+                  style={{
+                    width:      `${barPct}%`,
+                    background: 'rgba(38, 166, 154, 0.45)',
+                  }}
+                />
+              </div>
+              <div
+                className="flex-shrink-0 text-right"
+                style={{ width: 52, fontSize: 8, fontFamily: 'Inter, sans-serif', color: COLORS.long }}
+              >
+                ${lv.longLiq.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+              </div>
+              <div
+                className="flex-shrink-0"
+                style={{ width: 34, fontSize: 8, fontFamily: 'Inter, sans-serif', color: COLORS.textMuted }}
+              >
+                -{lv.longDistancePct.toFixed(1)}%
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Divider + current price */}
+      <div
+        className="flex flex-col items-center justify-center flex-shrink-0 px-3"
+        style={{ borderLeft: `1px solid ${COLORS.border}`, borderRight: `1px solid ${COLORS.border}` }}
+      >
+        <div className="panel-label mb-1" style={{ fontSize: 8 }}>PRICE</div>
+        <div
+          className="data-value font-bold"
+          style={{ fontSize: 13, color: COLORS.text, lineHeight: 1 }}
+        >
+          ${price.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+        </div>
+      </div>
+
+      {/* Short liquidations */}
+      <div className="flex flex-col flex-1 gap-1 overflow-hidden" style={{ minWidth: 0 }}>
+        <div
+          className="flex-shrink-0 mb-1"
+          style={{ fontSize: 8, fontFamily: 'Inter, sans-serif', color: COLORS.short, fontWeight: 700, letterSpacing: '0.05em' }}
+        >
+          SHORT LIQUIDATIONS
+        </div>
+        {levels.map((lv) => {
+          const barPct = maxDistPct > 0 ? (lv.shortDistancePct / maxDistPct) * 100 : 0;
+          return (
+            <div key={`short-${lv.leverage}`} className="flex items-center gap-1.5 flex-1" style={{ minHeight: 0 }}>
+              <div
+                className="flex-shrink-0 text-right font-semibold"
+                style={{ width: 22, fontSize: 9, fontFamily: 'Inter, sans-serif', color: COLORS.textSecondary }}
+              >
+                {lv.leverage}x
+              </div>
+              <div
+                className="flex-1 rounded-sm overflow-hidden"
+                style={{ height: '60%', background: COLORS.borderSubtle, minWidth: 0 }}
+              >
+                <div
+                  className="h-full rounded-sm"
+                  style={{
+                    width:      `${barPct}%`,
+                    background: 'rgba(239, 83, 80, 0.45)',
+                  }}
+                />
+              </div>
+              <div
+                className="flex-shrink-0 text-right"
+                style={{ width: 52, fontSize: 8, fontFamily: 'Inter, sans-serif', color: COLORS.short }}
+              >
+                ${lv.shortLiq.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+              </div>
+              <div
+                className="flex-shrink-0"
+                style={{ width: 34, fontSize: 8, fontFamily: 'Inter, sans-serif', color: COLORS.textMuted }}
+              >
+                +{lv.shortDistancePct.toFixed(1)}%
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Main component ────────────────────────────────────────────────────────
 export default function BottomCharts() {
   const [activeTab, setActiveTab] = useState<Tab>('Macro');
   const { fundingRate, openInterest, oiDelta, indicators } = useDashboardStore();
 
-  const macro = (indicators as any)?.macro_data as Record<string, { price: number; change_pct: number }> | undefined;
-  const fearGreed = (indicators as any)?.sentiment_fear_greed as { value: number; classification: string } | undefined;
-  const dominance = (indicators as any)?.sentiment_btc_dominance as { btc_dominance: number } | undefined;
-  const news = (indicators as any)?.news_articles as { title: string; source: string; url?: string }[] | undefined;
+  const macro      = (indicators as any)?.macro_data as Record<string, { price: number; change_pct: number }> | undefined;
+  const fearGreed  = (indicators as any)?.sentiment_fear_greed as { value: number; classification: string } | undefined;
+  const dominance  = (indicators as any)?.sentiment_btc_dominance as { btc_dominance: number } | undefined;
+  const news       = (indicators as any)?.news_articles as { title: string; source: string; url?: string }[] | undefined;
 
   const fundingColor =
     Math.abs(fundingRate ?? 0) > 0.001
@@ -106,10 +351,7 @@ export default function BottomCharts() {
       : COLORS.short;
 
   return (
-    <div
-      className="flex flex-col h-full"
-      style={{ background: COLORS.panel }}
-    >
+    <div className="flex flex-col h-full" style={{ background: COLORS.panel }}>
       {/* Tab bar */}
       <div
         className="flex items-center flex-shrink-0"
@@ -123,22 +365,23 @@ export default function BottomCharts() {
               onClick={() => setActiveTab(tab)}
               className="relative px-3 h-full text-[10px] font-medium transition-colors duration-100"
               style={{
-                color: active ? COLORS.accent : COLORS.textMuted,
-                background: active ? 'rgba(74,124,204,0.06)' : 'transparent',
-                fontFamily: 'Inter, sans-serif',
+                color:       active ? COLORS.accent : COLORS.textMuted,
+                background:  active ? 'rgba(74,124,204,0.06)' : 'transparent',
+                fontFamily:  'Inter, sans-serif',
                 letterSpacing: '0.04em',
                 borderRight: `1px solid ${COLORS.border}`,
+                whiteSpace:  'nowrap',
               }}
             >
               {tab}
               {active && (
                 <div
                   style={{
-                    position: 'absolute',
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    height: 1,
+                    position:   'absolute',
+                    bottom:     0,
+                    left:       0,
+                    right:      0,
+                    height:     1,
                     background: COLORS.accent,
                   }}
                 />
@@ -234,8 +477,6 @@ export default function BottomCharts() {
                   : 'Neutral funding environment'}
               </div>
             </div>
-
-            {/* Annualized */}
             <div
               className="flex flex-col pl-6"
               style={{ borderLeft: `1px solid ${COLORS.border}` }}
@@ -271,7 +512,6 @@ export default function BottomCharts() {
                 {formatPct(oiDelta)} vs 24h ago
               </div>
             </div>
-
             <div
               className="flex flex-col pl-6"
               style={{ borderLeft: `1px solid ${COLORS.border}` }}
@@ -290,6 +530,12 @@ export default function BottomCharts() {
           </div>
         )}
 
+        {/* ── Volume Profile ──────────────────────── */}
+        {activeTab === 'Vol Profile' && <VolumeProfilePanel />}
+
+        {/* ── Liquidation Levels ──────────────────── */}
+        {activeTab === 'Liq Levels' && <LiquidationLevelsPanel />}
+
         {/* ── News ───────────────────────────────── */}
         {activeTab === 'News' && (
           <div className="h-full overflow-y-auto">
@@ -303,10 +549,10 @@ export default function BottomCharts() {
                   <span
                     className="flex-shrink-0 text-[9px] font-semibold uppercase pt-px"
                     style={{
-                      color: COLORS.accent,
-                      fontFamily: 'Inter, sans-serif',
-                      letterSpacing: '0.04em',
-                      minWidth: 50,
+                      color:          COLORS.accent,
+                      fontFamily:     'Inter, sans-serif',
+                      letterSpacing:  '0.04em',
+                      minWidth:       50,
                     }}
                   >
                     {a.source}
