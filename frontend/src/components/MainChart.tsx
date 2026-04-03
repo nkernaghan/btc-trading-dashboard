@@ -467,36 +467,16 @@ export default function MainChart() {
     const firstTime = times[0];
     const lastTime  = times[times.length - 1];
 
-    // Extend the display range slightly into the future so series with future
-    // timestamps are visible when the user scrolls right.
-    const futureExtension = SECONDS_PER_DAY * 365 * 10; // 10 years ahead
-    const displayEnd = lastTime + futureExtension;
-
-    // Halving markers — one point per halving placed at its timestamp.
-    // For past halvings: snap to the closest candle close.
-    // For future halvings: place the point at the median close price so the
-    // marker appears visually reasonable (no candle data available yet).
-    const medianPrice = dedupedCandles[Math.floor(dedupedCandles.length / 2)]?.close
-      ?? (priceMin + priceMax) / 2;
-
+    // Only show halvings that fall within the candle data range
+    // (no future projections — they stretch the time axis)
     HALVING_DATES.forEach((hv, idx) => {
       const series = halvingSeriesRefs.current[idx];
       if (!series) return;
 
       const t = hv.time;
 
-      if (t > displayEnd) {
-        series.setData([]);
-        return;
-      }
-
-      if (t > lastTime) {
-        // Future halving — no candle data; place at median price
-        series.setData([{ time: t as any, value: medianPrice }]);
-        return;
-      }
-
-      if (t < firstTime - SECONDS_PER_DAY * 30) {
+      // Only show if within candle range
+      if (t < firstTime - SECONDS_PER_DAY * 30 || t > lastTime + SECONDS_PER_DAY * 30) {
         series.setData([]);
         return;
       }
@@ -511,8 +491,7 @@ export default function MainChart() {
         }
       }
 
-      const halvingPrice = dedupedCandles[closestIdx]?.close ?? medianPrice;
-      series.setData([{ time: times[closestIdx] as any, value: halvingPrice }]);
+      series.setData([{ time: times[closestIdx] as any, value: dedupedCandles[closestIdx]?.close ?? 0 }]);
     });
 
     // 4Y Cycle shading — draw upper/lower boundary lines for each bull phase.
@@ -532,19 +511,8 @@ export default function MainChart() {
         (c) => c.time >= bullStart && c.time <= bullEnd
       );
 
-      // Synthetic future points if phase extends beyond last candle
-      const syntheticStart = Math.max(bullStart, lastTime + SECONDS_PER_DAY);
-      const syntheticPoints: { time: number; high: number; low: number }[] = [];
-      if (syntheticStart <= bullEnd) {
-        for (let t = syntheticStart; t <= bullEnd; t += SECONDS_PER_DAY) {
-          syntheticPoints.push({ time: t, high: priceMax, low: priceMin });
-        }
-      }
-
-      const allPhasePoints = [
-        ...phaseCandles.map((c) => ({ time: c.time, high: c.high, low: c.low })),
-        ...syntheticPoints,
-      ];
+      // Only use actual candle data — no synthetic future points
+      const allPhasePoints = phaseCandles.map((c) => ({ time: c.time, high: c.high, low: c.low }));
 
       if (allPhasePoints.length === 0) {
         upperSeries.setData([]);
@@ -583,7 +551,7 @@ export default function MainChart() {
         // We always render even for future phases — lightweight-charts accepts
         // any ascending timestamps including future ones.
         const startT = Math.max(phase.start, firstTime - SECONDS_PER_DAY);
-        const endT   = Math.min(phase.end, displayEnd);
+        const endT   = Math.min(phase.end, lastTime + SECONDS_PER_DAY);
 
         if (startT >= endT) {
           zSeries.setData([]);
