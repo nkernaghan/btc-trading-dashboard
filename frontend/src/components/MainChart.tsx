@@ -8,7 +8,7 @@ import {
   HistogramSeries,
   LineSeries,
 } from 'lightweight-charts';
-import type { IChartApi, ISeriesApi } from 'lightweight-charts';
+import type { IChartApi, ISeriesApi, IPriceLine } from 'lightweight-charts';
 import { useDashboardStore } from '@/stores/dashboard';
 import { calcEMA, calcBollingerBands, calcVWAP, calcSupportResistance } from '@/lib/indicators';
 import { COLORS } from '@/lib/constants';
@@ -122,8 +122,8 @@ export default function MainChart() {
   // Indexed as [cycleIdx * 4 + phaseIdx]
   const zoneSeriesRefs = useRef<ISeriesApi<'Line'>[]>([]);
 
-  // S/R level series — [0..SR_TOP_N-1] resistance, [SR_TOP_N..2*SR_TOP_N-1] support
-  const srSeriesRefs = useRef<ISeriesApi<'Line'>[]>([]);
+  // S/R price lines drawn directly on the candle series via createPriceLine
+  const srPriceLinesRef = useRef<IPriceLine[]>([]);
 
   const [indicators, setIndicators] = useState<IndicatorState>(DEFAULT_INDICATORS);
 
@@ -340,7 +340,6 @@ export default function MainChart() {
           color:       phaseColor,
           lineWidth:   3,
           lineStyle:   2, // dashed
-          priceScaleId: '',  // overlay — doesn't affect Y-axis scaling
           priceLineVisible: false,
           lastValueVisible: false,
           crosshairMarkerVisible: false,
@@ -350,30 +349,8 @@ export default function MainChart() {
       }
     }
 
-    // S/R level series — SR_TOP_N resistance (red dashed) + SR_TOP_N support (green dashed)
-    const srArr: ISeriesApi<'Line'>[] = [];
-    for (let i = 0; i < SR_TOP_N; i++) {
-      srArr.push(chart.addSeries(LineSeries, {
-        color:       'rgba(239, 68, 68, 0.8)',
-        lineWidth:   1,
-        lineStyle:   2,
-        priceLineVisible: false,
-        lastValueVisible: true,
-        crosshairMarkerVisible: false,
-        visible: DEFAULT_INDICATORS.sr,
-      }));
-    }
-    for (let i = 0; i < SR_TOP_N; i++) {
-      srArr.push(chart.addSeries(LineSeries, {
-        color:       'rgba(34, 197, 94, 0.8)',
-        lineWidth:   1,
-        lineStyle:   2,
-        priceLineVisible: false,
-        lastValueVisible: true,
-        crosshairMarkerVisible: false,
-        visible: DEFAULT_INDICATORS.sr,
-      }));
-    }
+    // S/R levels are rendered via createPriceLine on the candle series — no
+    // separate LineSeries needed. Price lines always use the main right scale.
 
     chartRef.current       = chart;
     candleRef.current      = candleSeries;
@@ -388,7 +365,6 @@ export default function MainChart() {
     halvingSeriesRefs.current = hSeriesArr;
     cycleSeriesRefs.current   = cSeriesArr;
     zoneSeriesRefs.current    = zSeriesArr;
-    srSeriesRefs.current      = srArr;
 
     const ro = new ResizeObserver(() => {
       if (containerRef.current) {
@@ -460,10 +436,7 @@ export default function MainChart() {
       vwapRef.current.setData(toSeries(calcVWAP(dedupedCandles)));
     }
 
-    // Halving lines — place two data points bracketing each halving date
-    // at the historical high/low of the dataset so the line spans the chart.
-    const priceMin = Math.min(...dedupedCandles.map((c) => c.low));
-    const priceMax = Math.max(...dedupedCandles.map((c) => c.high));
+    // Halving lines — find each halving date within the candle range.
     const firstTime = times[0];
     const lastTime  = times[times.length - 1];
 
@@ -529,73 +502,80 @@ export default function MainChart() {
     }
 
     // ── Zone phase shading ───────────────────────────────────────────────────
-    // Draw 4 colored horizontal dashed lines at priceMax per cycle phase.
-    // The line sits at the top of the chart and acts as a phase label band.
+    // Draw 4 colored dashed lines that follow the candle close price across
+    // each phase. This places them on the main right price scale so they are
+    // always visible, acting as colored overlays on top of the price action.
     // Each cycle has 4 phases: accum (0–6m), bull (6–18m), dist (18–24m), bear (24m–next halving).
+
     for (let i = 0; i < HALVING_DATES.length - 1; i++) {
-      const halvingTime    = HALVING_DATES[i].time;
-      const nextHalving    = HALVING_DATES[i + 1].time;
+      const halvingTime = HALVING_DATES[i].time;
+      const nextHalving = HALVING_DATES[i + 1].time;
 
       const phases = [
-        { start: halvingTime,                          end: halvingTime + ZONE_ACCUM_END  },
-        { start: halvingTime + ZONE_ACCUM_END,         end: halvingTime + ZONE_BULL_END   },
-        { start: halvingTime + ZONE_BULL_END,          end: halvingTime + ZONE_DIST_END   },
-        { start: halvingTime + ZONE_DIST_END,          end: nextHalving                   },
+        { start: halvingTime,                  end: halvingTime + ZONE_ACCUM_END },
+        { start: halvingTime + ZONE_ACCUM_END, end: halvingTime + ZONE_BULL_END  },
+        { start: halvingTime + ZONE_BULL_END,  end: halvingTime + ZONE_DIST_END  },
+        { start: halvingTime + ZONE_DIST_END,  end: nextHalving                  },
       ];
 
       phases.forEach((phase, phaseIdx) => {
         const zSeries = zoneSeriesRefs.current[i * 4 + phaseIdx];
         if (!zSeries) return;
 
-        // Generate a two-point horizontal line at priceMax for this phase.
-        // We always render even for future phases — lightweight-charts accepts
-        // any ascending timestamps including future ones.
-        const startT = Math.max(phase.start, firstTime - SECONDS_PER_DAY);
-        const endT   = Math.min(phase.end, lastTime + SECONDS_PER_DAY);
+        // Collect candles that fall within this phase window
+        const phasePoints = dedupedCandles
+          .filter((c) => c.time >= phase.start && c.time <= phase.end)
+          .map((c) => ({ time: c.time as any, value: c.close }));
 
-        if (startT >= endT) {
+        if (phasePoints.length === 0) {
           zSeries.setData([]);
           return;
         }
 
-        // Two anchor points are sufficient for a straight horizontal line
-        zSeries.setData([
-          { time: startT as any, value: priceMax },
-          { time: endT   as any, value: priceMax },
-        ]);
+        zSeries.setData(phasePoints);
       });
     }
 
     // ── Support / Resistance levels ──────────────────────────────────────────
-    const sr = calcSupportResistance(dedupedCandles, 20, 0.01, SR_TOP_N);
+    // Use createPriceLine on the candle series so S/R lines always render on
+    // the main right price scale at the correct BTC price level.
+    if (candleRef.current) {
+      // Remove any previously created S/R price lines
+      for (const pl of srPriceLinesRef.current) {
+        candleRef.current.removePriceLine(pl);
+      }
+      srPriceLinesRef.current = [];
 
-    // Each level becomes a horizontal line spanning the full candle range
-    sr.resistance.forEach((price, idx) => {
-      const s = srSeriesRefs.current[idx];
-      if (!s) return;
-      s.setData([
-        { time: firstTime as any, value: price },
-        { time: lastTime  as any, value: price },
-      ]);
-    });
-    // Clear any unused resistance slots
-    for (let i = sr.resistance.length; i < SR_TOP_N; i++) {
-      srSeriesRefs.current[i]?.setData([]);
-    }
+      // Only add lines when the S/R toggle is active
+      if (indicators.sr) {
+        const sr = calcSupportResistance(dedupedCandles, 20, 0.01, SR_TOP_N);
 
-    sr.support.forEach((price, idx) => {
-      const s = srSeriesRefs.current[SR_TOP_N + idx];
-      if (!s) return;
-      s.setData([
-        { time: firstTime as any, value: price },
-        { time: lastTime  as any, value: price },
-      ]);
-    });
-    // Clear any unused support slots
-    for (let i = sr.support.length; i < SR_TOP_N; i++) {
-      srSeriesRefs.current[SR_TOP_N + i]?.setData([]);
+        sr.resistance.forEach((price, idx) => {
+          const pl = candleRef.current!.createPriceLine({
+            price,
+            color:            'rgba(239, 68, 68, 0.85)',
+            lineWidth:        1,
+            lineStyle:        2, // dashed
+            axisLabelVisible: true,
+            title:            `R${idx + 1}`,
+          });
+          srPriceLinesRef.current.push(pl);
+        });
+
+        sr.support.forEach((price, idx) => {
+          const pl = candleRef.current!.createPriceLine({
+            price,
+            color:            'rgba(34, 197, 94, 0.85)',
+            lineWidth:        1,
+            lineStyle:        2, // dashed
+            axisLabelVisible: true,
+            title:            `S${idx + 1}`,
+          });
+          srPriceLinesRef.current.push(pl);
+        });
+      }
     }
-  }, [candles, indicators.halving]);
+  }, [candles, indicators.halving, indicators.sr]);
 
   // ─── Sync series visibility when toggles change ──────────────────────────
   useEffect(() => {
@@ -621,9 +601,8 @@ export default function MainChart() {
       s.applyOptions({ visible: indicators.zones })
     );
 
-    srSeriesRefs.current.forEach((s) =>
-      s.applyOptions({ visible: indicators.sr })
-    );
+    // S/R price lines have no applyOptions — toggling is handled by
+    // the data effect re-running when indicators.sr changes.
   }, [indicators]);
 
   // ─── Toggle handler ──────────────────────────────────────────────────────
