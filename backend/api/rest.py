@@ -61,10 +61,52 @@ async def get_signal_history(limit: int = Query(50, le=500)):
 
 @router.get("/candles")
 async def get_candles(timeframe: str = "1H", limit: int = Query(500, le=5000)):
-    """Fetch historical candles from Hyperliquid REST API."""
+    """Fetch historical candles. Uses CoinGecko for 1D/1W (full BTC history), Hyperliquid for intraday."""
     import time
     interval = INTERVAL_MAP.get(timeframe, "1h")
-    # Calculate time range based on interval
+
+    # For daily/weekly, use CoinGecko to get full BTC history back to 2010
+    if interval in ("1d", "1w"):
+        return await _fetch_coingecko_candles(interval, limit)
+
+    # For intraday, use Hyperliquid
+    return await _fetch_hyperliquid_candles(interval, limit)
+
+
+async def _fetch_coingecko_candles(interval: str, limit: int):
+    """Fetch from yfinance — full BTC history back to 2014."""
+    import yfinance as yf
+    try:
+        btc = yf.Ticker("BTC-USD")
+        yf_interval = "1d" if interval == "1d" else "1wk"
+        hist = btc.history(period="max", interval=yf_interval)
+        if hist.empty:
+            return await _fetch_hyperliquid_candles(interval, limit)
+
+        candles = []
+        seen_times = set()
+        for idx, row in hist.iterrows():
+            t = int(idx.timestamp())
+            if t in seen_times:
+                continue
+            seen_times.add(t)
+            candles.append({
+                "time": t,
+                "open": round(float(row["Open"]), 2),
+                "high": round(float(row["High"]), 2),
+                "low": round(float(row["Low"]), 2),
+                "close": round(float(row["Close"]), 2),
+                "volume": round(float(row["Volume"]), 0),
+            })
+        candles.sort(key=lambda x: x["time"])
+        return candles[-limit:]
+    except Exception as e:
+        return await _fetch_hyperliquid_candles(interval, limit)
+
+
+async def _fetch_hyperliquid_candles(interval: str, limit: int):
+    """Fetch from Hyperliquid REST API."""
+    import time
     interval_ms = {
         "1m": 60_000, "5m": 300_000, "15m": 900_000,
         "1h": 3600_000, "4h": 14400_000, "1d": 86400_000, "1w": 604800_000,
@@ -89,15 +131,21 @@ async def get_candles(timeframe: str = "1H", limit: int = Query(500, le=5000)):
             if resp.status_code == 200:
                 raw = resp.json()
                 candles = []
+                seen_times = set()
                 for c in raw[-limit:]:
+                    t = int(c["t"]) // 1000
+                    if t in seen_times:
+                        continue
+                    seen_times.add(t)
                     candles.append({
-                        "time": int(c["t"]) // 1000,
+                        "time": t,
                         "open": float(c["o"]),
                         "high": float(c["h"]),
                         "low": float(c["l"]),
                         "close": float(c["c"]),
                         "volume": float(c["v"]),
                     })
+                candles.sort(key=lambda x: x["time"])
                 return candles
     except Exception as e:
         return {"error": str(e)}

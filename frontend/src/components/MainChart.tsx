@@ -370,13 +370,13 @@ export default function MainChart() {
 
     // VWAP
     if (vwapRef.current) {
-      vwapRef.current.setData(toSeries(calcVWAP(candles)));
+      vwapRef.current.setData(toSeries(calcVWAP(dedupedCandles)));
     }
 
     // Halving lines — place two data points bracketing each halving date
     // at the historical high/low of the dataset so the line spans the chart.
-    const priceMin = Math.min(...candles.map((c) => c.low));
-    const priceMax = Math.max(...candles.map((c) => c.high));
+    const priceMin = Math.min(...dedupedCandles.map((c) => c.low));
+    const priceMax = Math.max(...dedupedCandles.map((c) => c.high));
     const firstTime = times[0];
     const lastTime  = times[times.length - 1];
 
@@ -392,17 +392,20 @@ export default function MainChart() {
         return;
       }
 
-      // Find the closest candle time to the halving
-      const closest = times.reduce((prev, curr) =>
-        Math.abs(curr - t) < Math.abs(prev - t) ? curr : prev
-      );
+      // Find the closest candle index to the halving
+      let closestIdx = 0;
+      let minDist = Infinity;
+      for (let i = 0; i < times.length; i++) {
+        const dist = Math.abs(times[i] - t);
+        if (dist < minDist) { minDist = dist; closestIdx = i; }
+      }
 
-      // Place a two-point line at mid-price — the visual effect is a dot,
-      // not a vertical line, but it marks the event on the time axis.
-      // For proper vertical lines we add price-lines at the series level.
+      // Use the closest candle time as a single point marker
+      // (two identical times would crash the chart)
+      const markerTime = times[closestIdx];
+      const midPrice = (priceMin + priceMax) / 2;
       series.setData([
-        { time: closest as any, value: priceMin },
-        { time: closest as any, value: priceMax },
+        { time: markerTime as any, value: midPrice },
       ]);
 
       // Use a price line to draw the actual vertical marker
@@ -426,7 +429,7 @@ export default function MainChart() {
       if (!upperSeries || !lowerSeries) continue;
 
       // Only include times within the bull phase that overlap with candle data
-      const phaseCandles = candles.filter(
+      const phaseCandles = dedupedCandles.filter(
         (c) => c.time >= bullStart && c.time <= bullEnd
       );
 
