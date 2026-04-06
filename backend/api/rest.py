@@ -51,6 +51,19 @@ async def get_signal():
         "votes": json.loads(votes) if votes else [],
     }
 
+@router.post("/signal/refresh")
+async def refresh_signal():
+    """Generate a new signal on demand (triggered by user clicking Refresh)."""
+    from engine import run_engine_cycle
+    await run_engine_cycle()
+    r = await get_redis()
+    signal = await r.get("btc:signal:latest")
+    votes = await r.get("btc:votes:latest")
+    return {
+        "signal": json.loads(signal) if signal else None,
+        "votes": json.loads(votes) if votes else [],
+    }
+
 @router.get("/signals/history")
 async def get_signal_history(limit: int = Query(50, le=500)):
     db = await get_db()

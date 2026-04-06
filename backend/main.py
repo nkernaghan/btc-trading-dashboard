@@ -9,16 +9,15 @@ from api.websocket import router as ws_router
 from api.position import router as position_router
 from data.scheduler import start_scheduler, stop_scheduler
 from data.hyperliquid_ws import run_hyperliquid_ws
-from engine import engine_loop
+# Engine loop removed — signals are generated on-demand via POST /api/signal/refresh
+# Data fetchers (macro, sentiment, etc.) still run on schedule so data is fresh
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
     start_scheduler()
     ws_task = asyncio.create_task(run_hyperliquid_ws())
-    engine_task = asyncio.create_task(engine_loop())
     yield
-    engine_task.cancel()
     ws_task.cancel()
     stop_scheduler()
     await close_redis()

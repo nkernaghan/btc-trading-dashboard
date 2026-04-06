@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useDashboardStore } from '@/stores/dashboard';
 import { VOTE_COLORS, COLORS } from '@/lib/constants';
 import { formatPrice, formatPct } from '@/lib/format';
-import { fetchSignal, fetchSignalHistory } from '@/hooks/useApi';
+import { fetchSignal, loadLastSignal, fetchSignalHistory } from '@/hooks/useApi';
 import type { IndicatorVote, Signal } from '@/lib/types';
 
 function VoteDot({ vote }: { vote: string }) {
@@ -239,7 +239,7 @@ export default function SignalPanel() {
 
   // Load signal once on mount
   useEffect(() => {
-    fetchSignal().then(() => setLastRefresh(new Date()));
+    loadLastSignal().then(() => setLastRefresh(new Date()));
   }, []);
 
   const handleRefresh = async () => {

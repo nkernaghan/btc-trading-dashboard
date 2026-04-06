@@ -65,8 +65,26 @@ export function usePollingData() {
   }, [setPrice, setIndicators, setPosition, setCandles, timeframe]);
 }
 
-// Manual signal refresh — called by button click only
+// Manual signal refresh — generates a NEW signal on the backend (POST)
+// Only called when user clicks Refresh button
 export async function fetchSignal(): Promise<boolean> {
+  const { setSignal, setVotes } = useDashboardStore.getState();
+  try {
+    const res = await fetch(`${API_BASE}/api/signal/refresh`, { method: 'POST' });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.signal) setSignal(data.signal);
+      if (data.votes) setVotes(data.votes);
+      return true;
+    }
+  } catch (err) {
+    console.error('[API] signal refresh error:', err);
+  }
+  return false;
+}
+
+// Load the last signal without generating a new one (for initial page load)
+export async function loadLastSignal(): Promise<boolean> {
   const { setSignal, setVotes } = useDashboardStore.getState();
   try {
     const res = await fetch(`${API_BASE}/api/signal`);
@@ -77,7 +95,7 @@ export async function fetchSignal(): Promise<boolean> {
       return true;
     }
   } catch (err) {
-    console.error('[API] signal fetch error:', err);
+    console.error('[API] signal load error:', err);
   }
   return false;
 }
