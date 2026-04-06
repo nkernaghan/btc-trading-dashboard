@@ -261,7 +261,7 @@ async def run_engine_cycle():
     # Store + broadcast
     await r.set("btc:signal:latest", signal.model_dump_json())
     await r.set("btc:votes:latest", json.dumps([v.model_dump() for v in votes]))
-    await broadcast_signal(signal.model_dump())
+    await broadcast_signal(json.loads(signal.model_dump_json()))
 
     # Log to SQLite
     db = await get_db()
