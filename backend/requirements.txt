@@ -13,8 +13,8 @@ aiosqlite==0.20.0
 feedparser==6.0.11
 pydantic==2.10.0
 pydantic-settings==2.6.0
-transformers==4.46.0
-torch==2.5.0
+# transformers and torch removed — too heavy for cloud deploy (2GB+)
+# keyword-based sentiment works without them
 yfinance==0.2.48
 pytest==8.3.3
 pytest-asyncio==0.24.0
