@@ -26,21 +26,37 @@ function SetupRow({ label, value, color, highlight }: { label: string; value: st
 // Position sizing calculator
 function PositionSizer({ signal }: { signal: Signal }) {
   const [capital, setCapital] = useState(100);
-  const leverage = signal.recommended_leverage ?? 20;
+  const recLeverage = signal.recommended_leverage ?? 20;
+  const [leverage, setLeverage] = useState(recLeverage);
   const entry = signal.entry_low ?? 0;
   const sl = signal.stop_loss ?? 0;
   const tp1 = signal.take_profit_1 ?? 0;
   const tp2 = signal.take_profit_2 ?? 0;
-  const isLong = signal.direction === 'LONG';
+
+  // Update leverage when signal changes
+  useEffect(() => { setLeverage(recLeverage); }, [recLeverage]);
 
   const positionSize = capital * leverage;
   const slPct = entry > 0 ? Math.abs(sl - entry) / entry : 0;
   const tp1Pct = entry > 0 ? Math.abs(tp1 - entry) / entry : 0;
   const tp2Pct = entry > 0 ? Math.abs(tp2 - entry) / entry : 0;
+  const liqPrice = signal.direction === 'LONG'
+    ? entry * (1 - 1 / leverage)
+    : entry * (1 + 1 / leverage);
 
   const slLoss = -(capital * slPct * leverage);
   const tp1Win = capital * tp1Pct * leverage;
   const tp2Win = capital * tp2Pct * leverage;
+  const slReturnPct = -slPct * leverage * 100;
+  const tp1ReturnPct = tp1Pct * leverage * 100;
+  const tp2ReturnPct = tp2Pct * leverage * 100;
+
+  const inputStyle = {
+    background: COLORS.base,
+    border: `1px solid ${COLORS.border}`,
+    color: COLORS.text,
+    outline: 'none',
+  };
 
   return (
     <div style={{ borderBottom: `1px solid ${COLORS.border}` }}>
@@ -48,30 +64,85 @@ function PositionSizer({ signal }: { signal: Signal }) {
         <span className="panel-label">Position Sizing</span>
       </div>
       <div className="px-2 py-2">
-        <div className="flex items-center gap-2 mb-2">
-          <span className="text-[10px]" style={{ color: COLORS.textSecondary }}>Capital $</span>
-          <input
-            type="number"
-            value={capital}
-            onChange={(e) => setCapital(Math.max(1, Math.min(10000, Number(e.target.value) || 0)))}
-            className="data-value text-[11px] font-medium px-1.5 py-0.5 rounded"
-            style={{ width: 70, background: COLORS.base, border: `1px solid ${COLORS.border}`, color: COLORS.text, outline: 'none' }}
-          />
-          <span className="text-[10px]" style={{ color: COLORS.textMuted }}>× {leverage}x = ${positionSize.toLocaleString()}</span>
+        {/* Recommended badge */}
+        <div className="flex items-center gap-1 mb-2 text-[9px]" style={{ color: COLORS.textMuted }}>
+          <span>Recommended:</span>
+          <span className="font-semibold" style={{ color: COLORS.accent }}>{recLeverage}x</span>
+          {leverage !== recLeverage && (
+            <button
+              onClick={() => setLeverage(recLeverage)}
+              className="px-1 py-px rounded text-[8px] font-medium"
+              style={{ background: COLORS.accent, color: '#fff', cursor: 'pointer', border: 'none' }}
+            >
+              Reset
+            </button>
+          )}
         </div>
 
+        {/* Capital + Leverage inputs */}
+        <div className="flex items-center gap-2 mb-1.5">
+          <div className="flex items-center gap-1">
+            <span className="text-[10px]" style={{ color: COLORS.textSecondary }}>$</span>
+            <input
+              type="number"
+              value={capital}
+              onChange={(e) => setCapital(Math.max(1, Math.min(100000, Number(e.target.value) || 0)))}
+              className="data-value text-[11px] font-medium px-1.5 py-0.5 rounded"
+              style={{ width: 65, ...inputStyle }}
+            />
+          </div>
+          <span className="text-[10px]" style={{ color: COLORS.textMuted }}>×</span>
+          <div className="flex items-center gap-1">
+            <input
+              type="number"
+              value={leverage}
+              onChange={(e) => setLeverage(Math.max(1, Math.min(150, Number(e.target.value) || 1)))}
+              className="data-value text-[11px] font-medium px-1.5 py-0.5 rounded"
+              style={{ width: 45, ...inputStyle }}
+            />
+            <span className="text-[10px]" style={{ color: COLORS.textSecondary }}>x</span>
+          </div>
+        </div>
+
+        {/* Position size + liq */}
+        <div className="flex items-center justify-between mb-2 text-[10px]">
+          <span style={{ color: COLORS.textSecondary }}>Position: <span className="data-value font-medium" style={{ color: COLORS.text }}>${positionSize.toLocaleString()}</span></span>
+          <span style={{ color: COLORS.textSecondary }}>Liq: <span className="data-value font-medium" style={{ color: COLORS.warn }}>{formatPrice(liqPrice)}</span></span>
+        </div>
+
+        {/* Leverage slider */}
+        <input
+          type="range"
+          min={1}
+          max={100}
+          value={leverage}
+          onChange={(e) => setLeverage(Number(e.target.value))}
+          className="w-full mb-2"
+          style={{ height: 4, accentColor: COLORS.accent }}
+        />
+
+        {/* Projected PnL */}
         <div className="space-y-1 text-[10px]">
-          <div className="flex justify-between items-center px-1 py-0.5 rounded" style={{ background: 'rgba(239,83,80,0.06)' }}>
-            <span style={{ color: COLORS.textSecondary }}>If SL hit</span>
-            <span className="data-value font-semibold" style={{ color: COLORS.short }}>${slLoss.toFixed(2)}</span>
+          <div className="flex justify-between items-center px-1.5 py-1 rounded" style={{ background: 'rgba(239,83,80,0.06)' }}>
+            <span style={{ color: COLORS.textSecondary }}>SL hit</span>
+            <div className="flex items-center gap-2">
+              <span className="data-value" style={{ color: COLORS.short }}>{slReturnPct.toFixed(1)}%</span>
+              <span className="data-value font-semibold" style={{ color: COLORS.short }}>${slLoss.toFixed(2)}</span>
+            </div>
           </div>
-          <div className="flex justify-between items-center px-1 py-0.5 rounded" style={{ background: 'rgba(38,166,154,0.06)' }}>
-            <span style={{ color: COLORS.textSecondary }}>If TP1 hit</span>
-            <span className="data-value font-semibold" style={{ color: COLORS.long }}>+${tp1Win.toFixed(2)}</span>
+          <div className="flex justify-between items-center px-1.5 py-1 rounded" style={{ background: 'rgba(38,166,154,0.06)' }}>
+            <span style={{ color: COLORS.textSecondary }}>TP1 hit</span>
+            <div className="flex items-center gap-2">
+              <span className="data-value" style={{ color: COLORS.long }}>+{tp1ReturnPct.toFixed(1)}%</span>
+              <span className="data-value font-semibold" style={{ color: COLORS.long }}>+${tp1Win.toFixed(2)}</span>
+            </div>
           </div>
-          <div className="flex justify-between items-center px-1 py-0.5 rounded" style={{ background: 'rgba(38,166,154,0.06)' }}>
-            <span style={{ color: COLORS.textSecondary }}>If TP2 hit</span>
-            <span className="data-value font-semibold" style={{ color: COLORS.long }}>+${tp2Win.toFixed(2)}</span>
+          <div className="flex justify-between items-center px-1.5 py-1 rounded" style={{ background: 'rgba(38,166,154,0.06)' }}>
+            <span style={{ color: COLORS.textSecondary }}>TP2 hit</span>
+            <div className="flex items-center gap-2">
+              <span className="data-value" style={{ color: COLORS.long }}>+{tp2ReturnPct.toFixed(1)}%</span>
+              <span className="data-value font-semibold" style={{ color: COLORS.long }}>+${tp2Win.toFixed(2)}</span>
+            </div>
           </div>
         </div>
       </div>
