@@ -25,16 +25,27 @@ function SetupRow({ label, value, color, highlight }: { label: string; value: st
 
 // Position sizing calculator
 function PositionSizer({ signal }: { signal: Signal }) {
-  const [capital, setCapital] = useState(100);
   const recLeverage = signal.recommended_leverage ?? 20;
+  const score = signal.composite_score ?? 0;
+  const strength = signal.strength ?? 'NONE';
+
+  // Recommended position size ($1-$1000) based on signal confidence
+  // STRONG (70-100): $500-$1000 scaled by score
+  // WEAK (50-69): $50-$300 scaled by score
+  // NONE: $0
+  const recCapital = strength === 'NONE' ? 0
+    : strength === 'STRONG' ? Math.round(500 + (score - 70) / 30 * 500)
+    : Math.round(50 + (score - 50) / 20 * 250);
+
+  const [capital, setCapital] = useState(recCapital);
   const [leverage, setLeverage] = useState(recLeverage);
   const entry = signal.entry_low ?? 0;
   const sl = signal.stop_loss ?? 0;
   const tp1 = signal.take_profit_1 ?? 0;
   const tp2 = signal.take_profit_2 ?? 0;
 
-  // Update leverage when signal changes
-  useEffect(() => { setLeverage(recLeverage); }, [recLeverage]);
+  // Update when signal changes
+  useEffect(() => { setLeverage(recLeverage); setCapital(recCapital); }, [recLeverage, recCapital]);
 
   const positionSize = capital * leverage;
   const slPct = entry > 0 ? Math.abs(sl - entry) / entry : 0;
@@ -65,16 +76,20 @@ function PositionSizer({ signal }: { signal: Signal }) {
       </div>
       <div className="px-2 py-2">
         {/* Recommended badge */}
-        <div className="flex items-center gap-1 mb-2 text-[9px]" style={{ color: COLORS.textMuted }}>
-          <span>Recommended:</span>
-          <span className="font-semibold" style={{ color: COLORS.accent }}>{recLeverage}x</span>
-          {leverage !== recLeverage && (
+        <div className="flex items-center justify-between mb-2 px-1.5 py-1 rounded" style={{ background: `${COLORS.accent}08`, border: `1px solid ${COLORS.accent}20` }}>
+          <div className="flex items-center gap-1.5 text-[9px]" style={{ color: COLORS.textMuted }}>
+            <span>Rec:</span>
+            <span className="font-semibold" style={{ color: COLORS.accent }}>${recCapital}</span>
+            <span>@</span>
+            <span className="font-semibold" style={{ color: COLORS.accent }}>{recLeverage}x</span>
+          </div>
+          {(leverage !== recLeverage || capital !== recCapital) && (
             <button
-              onClick={() => setLeverage(recLeverage)}
-              className="px-1 py-px rounded text-[8px] font-medium"
+              onClick={() => { setLeverage(recLeverage); setCapital(recCapital); }}
+              className="px-1.5 py-px rounded text-[8px] font-medium"
               style={{ background: COLORS.accent, color: '#fff', cursor: 'pointer', border: 'none' }}
             >
-              Reset
+              Use Rec
             </button>
           )}
         </div>
