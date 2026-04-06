@@ -1,261 +1,266 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { useDashboardStore } from '@/stores/dashboard';
 import { VOTE_COLORS, COLORS } from '@/lib/constants';
-import { formatPrice } from '@/lib/format';
-import type { IndicatorVote } from '@/lib/types';
+import { formatPrice, formatPct } from '@/lib/format';
+import { fetchSignal, fetchSignalHistory } from '@/hooks/useApi';
+import type { IndicatorVote, Signal } from '@/lib/types';
 
 function VoteDot({ vote }: { vote: string }) {
   const color = VOTE_COLORS[vote] ?? COLORS.neutral;
   return (
-    <div
-      style={{
-        width: 5,
-        height: 5,
-        borderRadius: '50%',
-        background: color,
-        flexShrink: 0,
-        boxShadow: vote !== 'NEUTRAL' ? `0 0 4px ${color}80` : undefined,
-      }}
-    />
+    <div style={{ width: 5, height: 5, borderRadius: '50%', background: color, flexShrink: 0, boxShadow: vote !== 'NEUTRAL' ? `0 0 4px ${color}80` : undefined }} />
   );
 }
 
-function ConfluenceDots({ count, total = 3 }: { count: number; total?: number }) {
+function SetupRow({ label, value, color, highlight }: { label: string; value: string; color: string; highlight?: boolean }) {
   return (
-    <div className="flex items-center gap-1">
-      {Array.from({ length: total }).map((_, i) => (
-        <div
-          key={i}
-          style={{
-            width: 5,
-            height: 5,
-            borderRadius: '50%',
-            background: i < count ? COLORS.accent : COLORS.border,
-            boxShadow: i < count ? `0 0 4px ${COLORS.accent}60` : undefined,
-          }}
-        />
-      ))}
+    <div className="flex items-center justify-between px-2 py-1 row-hover" style={{ background: highlight ? `${color}08` : undefined, borderBottom: `1px solid ${COLORS.border}` }}>
+      <span className="data-label text-[10px]">{label}</span>
+      <span className="data-value text-[11px] font-medium" style={{ color }}>{value}</span>
     </div>
   );
 }
 
-function SetupRow({
-  label,
-  value,
-  color,
-  highlight,
-}: {
-  label: string;
-  value: string;
-  color: string;
-  highlight?: boolean;
-}) {
+// Position sizing calculator
+function PositionSizer({ signal }: { signal: Signal }) {
+  const [capital, setCapital] = useState(100);
+  const leverage = signal.recommended_leverage ?? 20;
+  const entry = signal.entry_low ?? 0;
+  const sl = signal.stop_loss ?? 0;
+  const tp1 = signal.take_profit_1 ?? 0;
+  const tp2 = signal.take_profit_2 ?? 0;
+  const isLong = signal.direction === 'LONG';
+
+  const positionSize = capital * leverage;
+  const slPct = entry > 0 ? Math.abs(sl - entry) / entry : 0;
+  const tp1Pct = entry > 0 ? Math.abs(tp1 - entry) / entry : 0;
+  const tp2Pct = entry > 0 ? Math.abs(tp2 - entry) / entry : 0;
+
+  const slLoss = -(capital * slPct * leverage);
+  const tp1Win = capital * tp1Pct * leverage;
+  const tp2Win = capital * tp2Pct * leverage;
+
   return (
-    <div
-      className="flex items-center justify-between px-2 py-1 row-hover"
-      style={{
-        background: highlight ? `${color}08` : undefined,
-        borderBottom: `1px solid ${COLORS.border}`,
-      }}
-    >
-      <span className="data-label text-[10px]">{label}</span>
-      <span className="data-value text-[11px] font-medium" style={{ color }}>
-        {value}
-      </span>
+    <div style={{ borderBottom: `1px solid ${COLORS.border}` }}>
+      <div className="flex items-center px-2 py-1.5" style={{ borderBottom: `1px solid ${COLORS.border}`, background: COLORS.surface }}>
+        <span className="panel-label">Position Sizing</span>
+      </div>
+      <div className="px-2 py-2">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-[10px]" style={{ color: COLORS.textSecondary }}>Capital $</span>
+          <input
+            type="number"
+            value={capital}
+            onChange={(e) => setCapital(Math.max(1, Math.min(10000, Number(e.target.value) || 0)))}
+            className="data-value text-[11px] font-medium px-1.5 py-0.5 rounded"
+            style={{ width: 70, background: COLORS.base, border: `1px solid ${COLORS.border}`, color: COLORS.text, outline: 'none' }}
+          />
+          <span className="text-[10px]" style={{ color: COLORS.textMuted }}>× {leverage}x = ${positionSize.toLocaleString()}</span>
+        </div>
+
+        <div className="space-y-1 text-[10px]">
+          <div className="flex justify-between items-center px-1 py-0.5 rounded" style={{ background: 'rgba(239,83,80,0.06)' }}>
+            <span style={{ color: COLORS.textSecondary }}>If SL hit</span>
+            <span className="data-value font-semibold" style={{ color: COLORS.short }}>${slLoss.toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between items-center px-1 py-0.5 rounded" style={{ background: 'rgba(38,166,154,0.06)' }}>
+            <span style={{ color: COLORS.textSecondary }}>If TP1 hit</span>
+            <span className="data-value font-semibold" style={{ color: COLORS.long }}>+${tp1Win.toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between items-center px-1 py-0.5 rounded" style={{ background: 'rgba(38,166,154,0.06)' }}>
+            <span style={{ color: COLORS.textSecondary }}>If TP2 hit</span>
+            <span className="data-value font-semibold" style={{ color: COLORS.long }}>+${tp2Win.toFixed(2)}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Signal history with PnL
+function SignalHistory() {
+  const [history, setHistory] = useState<any[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const { price } = useDashboardStore();
+
+  useEffect(() => {
+    if (showHistory) {
+      fetchSignalHistory(20).then(setHistory);
+    }
+  }, [showHistory]);
+
+  if (!showHistory) {
+    return (
+      <div style={{ borderBottom: `1px solid ${COLORS.border}` }}>
+        <button
+          onClick={() => setShowHistory(true)}
+          className="w-full px-3 py-1.5 text-[10px] font-medium text-left row-hover"
+          style={{ color: COLORS.accent, fontFamily: 'Inter, sans-serif' }}
+        >
+          View Signal History →
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ borderBottom: `1px solid ${COLORS.border}` }}>
+      <div className="flex items-center justify-between px-2 py-1.5" style={{ borderBottom: `1px solid ${COLORS.border}`, background: COLORS.surface }}>
+        <span className="panel-label">History</span>
+        <button onClick={() => setShowHistory(false)} className="text-[10px]" style={{ color: COLORS.textMuted }}>×</button>
+      </div>
+      <div className="max-h-[200px] overflow-y-auto">
+        {history.length === 0 ? (
+          <div className="px-3 py-2 text-[10px]" style={{ color: COLORS.textMuted }}>No history yet</div>
+        ) : (
+          history.map((h, i) => {
+            const entry = h.entry_low ?? 0;
+            const sl = h.stop_loss ?? 0;
+            const tp1 = h.take_profit_1 ?? 0;
+            const isLong = h.direction === 'LONG';
+            const currentPnlPct = entry > 0
+              ? (isLong ? (price - entry) / entry : (entry - price) / entry) * 100
+              : 0;
+            const dirColor = h.direction === 'LONG' ? COLORS.long : h.direction === 'SHORT' ? COLORS.short : COLORS.neutral;
+            const pnlColor = currentPnlPct >= 0 ? COLORS.long : COLORS.short;
+
+            return (
+              <div key={i} className="flex items-center gap-2 px-2 py-1.5 row-hover text-[10px]" style={{ borderBottom: `1px solid ${COLORS.border}` }}>
+                <span className="font-semibold" style={{ color: dirColor, width: 40 }}>{h.direction}</span>
+                <span className="data-value" style={{ color: COLORS.textSecondary, width: 35 }}>{(h.composite_score ?? 0).toFixed(0)}%</span>
+                <span className="data-value" style={{ color: COLORS.textSecondary }}>{formatPrice(entry)}</span>
+                <span className="data-value font-semibold ml-auto" style={{ color: pnlColor }}>
+                  {currentPnlPct >= 0 ? '+' : ''}{currentPnlPct.toFixed(2)}%
+                </span>
+                <span className="text-[9px]" style={{ color: COLORS.textMuted }}>
+                  {h.timestamp ? new Date(h.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                </span>
+              </div>
+            );
+          })
+        )}
+      </div>
     </div>
   );
 }
 
 export default function SignalPanel() {
-  const { signal, votes, warnings } = useDashboardStore();
+  const { signal, votes, warnings, price } = useDashboardStore();
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+
+  // Load signal once on mount
+  useEffect(() => {
+    fetchSignal().then(() => setLastRefresh(new Date()));
+  }, []);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchSignal();
+    setLastRefresh(new Date());
+    setRefreshing(false);
+  };
 
   const direction = signal?.direction ?? 'WAIT';
   const score = signal?.composite_score ?? 0;
   const strength = signal?.strength ?? 'NONE';
   const confluence = signal?.confluence_count ?? 0;
-
-  const dirColor =
-    direction === 'LONG' ? COLORS.long : direction === 'SHORT' ? COLORS.short : COLORS.neutral;
-
-  const dirBg =
-    direction === 'LONG'
-      ? 'rgba(45,159,111,0.06)'
-      : direction === 'SHORT'
-      ? 'rgba(199,75,75,0.06)'
-      : 'rgba(75,80,96,0.04)';
-
-  const glowClass =
-    direction === 'LONG'
-      ? 'score-glow-long'
-      : direction === 'SHORT'
-      ? 'score-glow-short'
-      : '';
-
-  const displayVotes: IndicatorVote[] =
-    votes.length > 0 ? votes : (signal?.votes ?? []);
-
+  const dirColor = direction === 'LONG' ? COLORS.long : direction === 'SHORT' ? COLORS.short : COLORS.neutral;
+  const dirBg = direction === 'LONG' ? 'rgba(38,166,154,0.05)' : direction === 'SHORT' ? 'rgba(239,83,80,0.05)' : 'transparent';
+  const glowClass = direction === 'LONG' ? 'score-glow-long' : direction === 'SHORT' ? 'score-glow-short' : '';
+  const displayVotes: IndicatorVote[] = votes.length > 0 ? votes : (signal?.votes ?? []);
   const bullVotes = displayVotes.filter((v) => v.vote === 'BULL').length;
   const bearVotes = displayVotes.filter((v) => v.vote === 'BEAR').length;
 
   return (
-    <div
-      className="flex flex-col h-full overflow-hidden"
-      style={{ background: COLORS.panel }}
-    >
-      {/* Panel header */}
-      <div
-        className="flex items-center justify-between px-3 py-2 flex-shrink-0"
-        style={{ borderBottom: `1px solid ${COLORS.border}` }}
-      >
-        <span className="panel-label">Signal</span>
-        <div className="flex items-center gap-1.5 text-[9px]" style={{ color: COLORS.textMuted }}>
-          <span style={{ color: COLORS.long }}>{bullVotes}↑</span>
-          <span style={{ color: COLORS.short }}>{bearVotes}↓</span>
+    <div className="flex flex-col h-full overflow-hidden" style={{ background: COLORS.panel }}>
+      {/* Header with refresh button */}
+      <div className="flex items-center justify-between px-3 py-2 flex-shrink-0" style={{ borderBottom: `1px solid ${COLORS.border}` }}>
+        <div className="flex items-center gap-2">
+          <span className="panel-label">Signal</span>
+          <span className="text-[9px]" style={{ color: COLORS.textMuted }}>
+            {lastRefresh ? lastRefresh.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : ''}
+          </span>
         </div>
+        <button
+          onClick={handleRefresh}
+          disabled={refreshing}
+          className="px-2 py-0.5 text-[10px] font-semibold rounded transition-colors"
+          style={{
+            background: refreshing ? COLORS.surface : COLORS.accent,
+            color: refreshing ? COLORS.textMuted : '#fff',
+            border: 'none',
+            cursor: refreshing ? 'wait' : 'pointer',
+            fontFamily: 'Inter, sans-serif',
+          }}
+        >
+          {refreshing ? '...' : '↻ Refresh'}
+        </button>
       </div>
 
       <div className="flex-1 overflow-y-auto">
         {/* Score Block */}
-        <div
-          className={`flex flex-col items-center justify-center py-5 ${glowClass}`}
-          style={{ background: dirBg, borderBottom: `1px solid ${COLORS.border}` }}
-        >
-          {/* Direction label */}
-          <div
-            className="text-[9px] font-semibold tracking-widest uppercase mb-2 px-2 py-0.5 rounded-sm"
-            style={{
-              color: dirColor,
-              background: `${dirColor}15`,
-              fontFamily: 'Inter, sans-serif',
-              letterSpacing: '0.15em',
-            }}
-          >
+        <div className={`flex flex-col items-center justify-center py-4 ${glowClass}`} style={{ background: dirBg, borderBottom: `1px solid ${COLORS.border}` }}>
+          <div className="text-[9px] font-semibold tracking-widest uppercase mb-1.5 px-2 py-0.5 rounded-sm" style={{ color: dirColor, background: `${dirColor}15`, fontFamily: 'Inter, sans-serif' }}>
             {direction}
           </div>
-
-          {/* Composite score */}
-          <div
-            className="data-value font-semibold"
-            style={{
-              fontSize: 38,
-              lineHeight: 1,
-              color: dirColor,
-              letterSpacing: '-0.02em',
-              textShadow: direction !== 'WAIT' ? `0 0 20px ${dirColor}40` : undefined,
-            }}
-          >
+          <div className="data-value font-semibold" style={{ fontSize: 34, lineHeight: 1, color: dirColor, textShadow: direction !== 'WAIT' ? `0 0 20px ${dirColor}40` : undefined }}>
             {score > 0 ? score.toFixed(1) : '--'}
           </div>
-
-          {/* Strength + Confluence */}
-          <div className="flex items-center gap-3 mt-3">
-            {strength !== 'NONE' && (
-              <span
-                className="text-[9px] font-semibold uppercase px-1.5 py-0.5 rounded-sm"
-                style={{
-                  color: strength === 'STRONG' ? dirColor : COLORS.textMuted,
-                  background: strength === 'STRONG' ? `${dirColor}15` : COLORS.surface,
-                  fontFamily: 'Inter, sans-serif',
-                  letterSpacing: '0.08em',
-                }}
-              >
-                {strength}
-              </span>
-            )}
-            <div className="flex items-center gap-2">
-              <ConfluenceDots count={confluence} total={3} />
-              <span className="text-[9px]" style={{ color: COLORS.textMuted }}>
-                {confluence}/3
-              </span>
-            </div>
+          <div className="flex items-center gap-2 mt-2 text-[9px]" style={{ color: COLORS.textMuted }}>
+            {strength !== 'NONE' && <span className="font-semibold" style={{ color: strength === 'STRONG' ? dirColor : COLORS.textMuted }}>{strength}</span>}
+            <span>{bullVotes}↑ {bearVotes}↓</span>
+            <span>{confluence}/3 TF</span>
           </div>
         </div>
 
         {/* Trade Setup */}
         {signal && direction !== 'WAIT' && (
-          <div className="flex-shrink-0" style={{ borderBottom: `1px solid ${COLORS.border}` }}>
-            <div
-              className="flex items-center px-3 py-1.5"
-              style={{ borderBottom: `1px solid ${COLORS.border}`, background: COLORS.surface }}
-            >
-              <span className="panel-label">Trade Setup</span>
+          <>
+            <div style={{ borderBottom: `1px solid ${COLORS.border}` }}>
+              <div className="flex items-center px-2 py-1.5" style={{ borderBottom: `1px solid ${COLORS.border}`, background: COLORS.surface }}>
+                <span className="panel-label">Trade Setup</span>
+              </div>
+              <SetupRow label="Entry" value={formatPrice(signal.entry_low ?? 0)} color={COLORS.text} />
+              <SetupRow label="Stop Loss" value={formatPrice(signal.stop_loss ?? 0)} color={COLORS.short} highlight />
+              <SetupRow label="TP1" value={formatPrice(signal.take_profit_1 ?? 0)} color={COLORS.long} highlight />
+              <SetupRow label="TP2" value={formatPrice(signal.take_profit_2 ?? 0)} color={COLORS.long} highlight />
+              <div className="grid px-2 py-1.5 gap-x-4" style={{ gridTemplateColumns: '1fr 1fr', borderBottom: `1px solid ${COLORS.border}`, background: COLORS.surface }}>
+                <div className="flex flex-col">
+                  <span className="data-label text-[9px]">Leverage</span>
+                  <span className="data-value text-[12px] font-semibold" style={{ color: COLORS.accent }}>{signal.recommended_leverage ?? 0}x</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="data-label text-[9px]">R:R</span>
+                  <span className="data-value text-[12px] font-semibold" style={{ color: COLORS.text }}>{(signal.risk_reward_ratio ?? 0).toFixed(2)}</span>
+                </div>
+              </div>
+              <SetupRow label="Liquidation" value={formatPrice(signal.liquidation_price ?? 0)} color={COLORS.warn} highlight />
             </div>
 
-            <SetupRow label="Entry" value={formatPrice(signal.entry_low ?? 0)} color={COLORS.text} />
-            <SetupRow label="Stop Loss" value={formatPrice(signal.stop_loss ?? 0)} color={COLORS.short} highlight />
-            <SetupRow label="Take Profit 1" value={formatPrice(signal.take_profit_1 ?? 0)} color={COLORS.long} highlight />
-            <SetupRow label="Take Profit 2" value={formatPrice(signal.take_profit_2 ?? 0)} color={COLORS.long} highlight />
-
-            <div
-              className="grid px-2 py-1.5 gap-x-4"
-              style={{
-                gridTemplateColumns: '1fr 1fr',
-                borderBottom: `1px solid ${COLORS.border}`,
-                background: COLORS.surface,
-              }}
-            >
-              <div className="flex flex-col">
-                <span className="data-label text-[9px]">Leverage</span>
-                <span className="data-value text-[12px] font-semibold" style={{ color: COLORS.accent }}>
-                  {signal.recommended_leverage ?? 0}x
-                </span>
-              </div>
-              <div className="flex flex-col">
-                <span className="data-label text-[9px]">R:R Ratio</span>
-                <span className="data-value text-[12px] font-semibold" style={{ color: COLORS.text }}>
-                  {(signal.risk_reward_ratio ?? 0).toFixed(2)}
-                </span>
-              </div>
-            </div>
-
-            <SetupRow
-              label="Liquidation"
-              value={formatPrice(signal.liquidation_price ?? 0)}
-              color={COLORS.warn}
-              highlight
-            />
-          </div>
+            {/* Position Sizing */}
+            <PositionSizer signal={signal} />
+          </>
         )}
+
+        {/* Signal History */}
+        <SignalHistory />
 
         {/* Votes */}
         <div className="flex-shrink-0">
-          <div
-            className="flex items-center px-3 py-1.5"
-            style={{ borderBottom: `1px solid ${COLORS.border}`, background: COLORS.surface }}
-          >
+          <div className="flex items-center px-2 py-1.5" style={{ borderBottom: `1px solid ${COLORS.border}`, background: COLORS.surface }}>
             <span className="panel-label">Votes</span>
           </div>
-
           {displayVotes.length === 0 ? (
-            <div className="px-3 py-3 text-[10px]" style={{ color: COLORS.textMuted }}>
-              Awaiting data...
-            </div>
+            <div className="px-3 py-2 text-[10px]" style={{ color: COLORS.textMuted }}>Click Refresh to load signal</div>
           ) : (
             displayVotes.map((v, i) => (
-              <div
-                key={i}
-                className="flex items-center gap-2 px-3 py-1 row-hover"
-                style={{ borderBottom: `1px solid ${COLORS.border}` }}
-              >
+              <div key={i} className="flex items-center gap-2 px-2 py-1 row-hover" style={{ borderBottom: `1px solid ${COLORS.border}` }}>
                 <VoteDot vote={v.vote} />
-                <span
-                  className="flex-1 text-[10px] truncate"
-                  style={{ color: COLORS.textSecondary }}
-                  title={v.description || v.name}
-                >
-                  {v.name}
-                </span>
-                <span
-                  className="text-[9px] font-semibold"
-                  style={{
-                    color: VOTE_COLORS[v.vote] ?? COLORS.neutral,
-                    fontFamily: 'Inter, sans-serif',
-                    letterSpacing: '0.04em',
-                  }}
-                >
-                  {v.vote}
-                </span>
+                <span className="flex-1 text-[10px] truncate" style={{ color: COLORS.textSecondary }}>{v.name}</span>
+                <span className="text-[9px] font-semibold" style={{ color: VOTE_COLORS[v.vote] ?? COLORS.neutral }}>{v.vote}</span>
               </div>
             ))
           )}
@@ -263,28 +268,10 @@ export default function SignalPanel() {
 
         {/* Warnings */}
         {warnings.length > 0 && (
-          <div
-            className="flex-shrink-0 mt-auto"
-            style={{ borderTop: `1px solid ${COLORS.border}` }}
-          >
-            <div
-              className="flex items-center px-3 py-1.5"
-              style={{ borderBottom: `1px solid ${COLORS.border}`, background: COLORS.surface }}
-            >
-              <span className="panel-label" style={{ color: COLORS.warn }}>Warnings</span>
-            </div>
+          <div>
             {warnings.map((w, i) => (
-              <div
-                key={i}
-                className="flex items-start gap-2 px-3 py-1.5 text-[10px]"
-                style={{
-                  color: COLORS.warn,
-                  borderBottom: `1px solid ${COLORS.border}`,
-                  background: 'rgba(196,154,60,0.04)',
-                }}
-              >
-                <span style={{ flexShrink: 0, marginTop: 1 }}>⚠</span>
-                <span>{w}</span>
+              <div key={i} className="flex items-start gap-2 px-2 py-1 text-[10px]" style={{ color: COLORS.warn, borderBottom: `1px solid ${COLORS.border}`, background: 'rgba(255,152,0,0.04)' }}>
+                <span>⚠</span><span>{w}</span>
               </div>
             ))}
           </div>
