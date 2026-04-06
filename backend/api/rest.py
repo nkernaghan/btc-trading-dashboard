@@ -27,7 +27,8 @@ async def get_price():
 async def get_indicators():
     r = await get_redis()
     keys = ["macro:data", "onchain:data", "sentiment:fear_greed", "sentiment:btc_dominance",
-            "sentiment:polymarket", "options:data", "coinglass:data", "news:articles", "etf:flows"]
+            "sentiment:polymarket", "options:data", "coinglass:data", "news:articles", "etf:flows",
+            "geopolitical:events", "geopolitical:tone", "geopolitical:conflict"]
     result = {}
     for key in keys:
         val = await r.get(key)

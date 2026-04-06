@@ -56,6 +56,9 @@ async def run_engine_cycle():
     coinglass_raw = await r.get("coinglass:data")
     stablecoin_raw = await r.get("onchain:stablecoin")
     news_raw = await r.get("news:articles")
+    geo_tone_raw = await r.get("geopolitical:tone")
+    geo_conflict_raw = await r.get("geopolitical:conflict")
+    geo_events_raw = await r.get("geopolitical:events")
 
     if not candle_raw:
         return
@@ -234,6 +237,39 @@ async def run_engine_cycle():
             # Just signal that polymarket data exists
             votes.append(vote("Polymarket", IndicatorCategory.SENTIMENT, len(pm),
                               {"bull": (5, 100), "bear": (0, 0)}))  # Neutral placeholder
+
+    # ==================== GEOPOLITICAL (GDELT) ====================
+    if geo_tone_raw:
+        tone = json.loads(geo_tone_raw)
+        avg_tone = safe_float(tone.get("avg_tone_24h"), None)
+        if avg_tone is not None:
+            # Negative tone = geopolitical tension = bearish for risk assets
+            votes.append(vote("Geo Tone", IndicatorCategory.SENTIMENT, avg_tone,
+                              {"bull": (0, 10), "bear": (-10, -2)}))
+            if avg_tone < -4:
+                warnings.append(f"Geopolitical tension elevated: tone {avg_tone:.1f}")
+
+    if geo_conflict_raw:
+        conflict = json.loads(geo_conflict_raw)
+        change = safe_float(conflict.get("change_pct"), None)
+        if change is not None:
+            # Rising conflict volume = bearish
+            votes.append(vote("Conflict Vol", IndicatorCategory.SENTIMENT, change,
+                              {"bull": (-50, -10), "bear": (20, 200)}))
+            if conflict.get("elevated"):
+                warnings.append(f"Conflict volume spike: +{change:.0f}%")
+
+    if geo_events_raw:
+        events = json.loads(geo_events_raw)
+        if isinstance(events, list) and len(events) > 0:
+            # Count bearish keywords in geopolitical headlines
+            bear_kw = ["war", "attack", "missile", "nuclear", "sanctions", "invasion", "bombing", "escalat"]
+            bull_kw = ["ceasefire", "peace", "deal", "agreement", "de-escalat"]
+            bear_count = sum(1 for e in events for kw in bear_kw if kw in (e.get("title", "")).lower())
+            bull_count = sum(1 for e in events for kw in bull_kw if kw in (e.get("title", "")).lower())
+            geo_sentiment = (bull_count - bear_count) / max(bear_count + bull_count, 1)
+            votes.append(vote("Geo Events", IndicatorCategory.SENTIMENT, geo_sentiment,
+                              {"bull": (0.2, 1.0), "bear": (-1.0, -0.2)}))
 
     # ==================== COMPOSITE SCORING ====================
     confluence_count = 2
