@@ -1,6 +1,7 @@
 """APScheduler-based scheduler for all data fetchers."""
 
 import logging
+from datetime import datetime
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
@@ -36,48 +37,48 @@ def start_scheduler() -> AsyncIOScheduler:
     _scheduler = AsyncIOScheduler()
 
     # 5-minute interval fetchers
-    _scheduler.add_job(fetch_macro, "interval", minutes=5, id="macro", misfire_grace_time=60)
-    _scheduler.add_job(fetch_coinglass, "interval", minutes=5, id="coinglass", misfire_grace_time=60)
-    _scheduler.add_job(fetch_btc_dominance, "interval", minutes=5, id="btc_dominance", misfire_grace_time=60)
-    _scheduler.add_job(fetch_polymarket, "interval", minutes=5, id="polymarket", misfire_grace_time=60)
-    _scheduler.add_job(fetch_onchain, "interval", minutes=5, id="onchain", misfire_grace_time=60)
-    _scheduler.add_job(fetch_news_api, "interval", minutes=5, id="news", misfire_grace_time=60)
+    _scheduler.add_job(fetch_macro, "interval", minutes=5, id="macro", misfire_grace_time=60, next_run_time=datetime.now())
+    _scheduler.add_job(fetch_coinglass, "interval", minutes=5, id="coinglass", misfire_grace_time=60, next_run_time=datetime.now())
+    _scheduler.add_job(fetch_btc_dominance, "interval", minutes=5, id="btc_dominance", misfire_grace_time=60, next_run_time=datetime.now())
+    _scheduler.add_job(fetch_polymarket, "interval", minutes=5, id="polymarket", misfire_grace_time=60, next_run_time=datetime.now())
+    _scheduler.add_job(fetch_onchain, "interval", minutes=5, id="onchain", misfire_grace_time=60, next_run_time=datetime.now())
+    _scheduler.add_job(fetch_news_api, "interval", minutes=5, id="news", misfire_grace_time=60, next_run_time=datetime.now())
 
     # OKX derivatives data (free, no key)
-    _scheduler.add_job(fetch_okx_funding, "interval", minutes=5, id="okx_funding", misfire_grace_time=60)
-    _scheduler.add_job(fetch_okx_open_interest, "interval", minutes=5, id="okx_oi", misfire_grace_time=60)
+    _scheduler.add_job(fetch_okx_funding, "interval", minutes=5, id="okx_funding", misfire_grace_time=60, next_run_time=datetime.now())
+    _scheduler.add_job(fetch_okx_open_interest, "interval", minutes=5, id="okx_oi", misfire_grace_time=60, next_run_time=datetime.now())
 
     # Binance USDM futures (free, no key)
-    _scheduler.add_job(fetch_binance_funding, "interval", minutes=5, id="binance_funding", misfire_grace_time=60)
-    _scheduler.add_job(fetch_binance_oi, "interval", minutes=5, id="binance_oi", misfire_grace_time=60)
+    _scheduler.add_job(fetch_binance_funding, "interval", minutes=5, id="binance_funding", misfire_grace_time=60, next_run_time=datetime.now())
+    _scheduler.add_job(fetch_binance_oi, "interval", minutes=5, id="binance_oi", misfire_grace_time=60, next_run_time=datetime.now())
 
     # Coinalyze aggregated derivatives (free key, 40 req/min)
-    _scheduler.add_job(fetch_coinalyze_liquidations, "interval", minutes=5, id="ca_liquidations", misfire_grace_time=60)
-    _scheduler.add_job(fetch_coinalyze_oi, "interval", minutes=5, id="ca_oi", misfire_grace_time=60)
-    _scheduler.add_job(fetch_coinalyze_funding, "interval", minutes=5, id="ca_funding", misfire_grace_time=60)
-    _scheduler.add_job(fetch_coinalyze_long_short, "interval", minutes=5, id="ca_long_short", misfire_grace_time=60)
+    _scheduler.add_job(fetch_coinalyze_liquidations, "interval", minutes=5, id="ca_liquidations", misfire_grace_time=60, next_run_time=datetime.now())
+    _scheduler.add_job(fetch_coinalyze_oi, "interval", minutes=5, id="ca_oi", misfire_grace_time=60, next_run_time=datetime.now())
+    _scheduler.add_job(fetch_coinalyze_funding, "interval", minutes=5, id="ca_funding", misfire_grace_time=60, next_run_time=datetime.now())
+    _scheduler.add_job(fetch_coinalyze_long_short, "interval", minutes=5, id="ca_long_short", misfire_grace_time=60, next_run_time=datetime.now())
 
     # Free on-chain and DeFi data (no key)
-    _scheduler.add_job(fetch_whale_transactions, "interval", minutes=5, id="whale_txs", misfire_grace_time=60)
-    _scheduler.add_job(fetch_btc_tx_volume, "interval", minutes=15, id="btc_tx_volume", misfire_grace_time=120)
-    _scheduler.add_job(fetch_stablecoin_flows, "interval", minutes=15, id="stablecoin_flows", misfire_grace_time=120)
-    _scheduler.add_job(fetch_defi_tvl, "interval", minutes=15, id="defi_tvl", misfire_grace_time=120)
-    _scheduler.add_job(fetch_hashrate_difficulty, "interval", minutes=15, id="hashrate", misfire_grace_time=120)
+    _scheduler.add_job(fetch_whale_transactions, "interval", minutes=5, id="whale_txs", misfire_grace_time=60, next_run_time=datetime.now())
+    _scheduler.add_job(fetch_btc_tx_volume, "interval", minutes=15, id="btc_tx_volume", misfire_grace_time=120, next_run_time=datetime.now())
+    _scheduler.add_job(fetch_stablecoin_flows, "interval", minutes=15, id="stablecoin_flows", misfire_grace_time=120, next_run_time=datetime.now())
+    _scheduler.add_job(fetch_defi_tvl, "interval", minutes=15, id="defi_tvl", misfire_grace_time=120, next_run_time=datetime.now())
+    _scheduler.add_job(fetch_hashrate_difficulty, "interval", minutes=15, id="hashrate", misfire_grace_time=120, next_run_time=datetime.now())
 
     # ETF flow proxy (Yahoo Finance — free, no key)
-    _scheduler.add_job(fetch_etf_flows, "interval", minutes=15, id="etf_flows", misfire_grace_time=120)
+    _scheduler.add_job(fetch_etf_flows, "interval", minutes=15, id="etf_flows", misfire_grace_time=120, next_run_time=datetime.now())
 
     # Geopolitical data (GDELT — free, no key)
-    _scheduler.add_job(fetch_geopolitical_events, "interval", minutes=10, id="geopolitical_events", misfire_grace_time=120)
-    _scheduler.add_job(fetch_geopolitical_tone, "interval", minutes=15, id="geopolitical_tone", misfire_grace_time=120)
-    _scheduler.add_job(fetch_conflict_intensity, "interval", minutes=15, id="conflict_intensity", misfire_grace_time=120)
+    _scheduler.add_job(fetch_geopolitical_events, "interval", minutes=10, id="geopolitical_events", misfire_grace_time=120, next_run_time=datetime.now())
+    _scheduler.add_job(fetch_geopolitical_tone, "interval", minutes=15, id="geopolitical_tone", misfire_grace_time=120, next_run_time=datetime.now())
+    _scheduler.add_job(fetch_conflict_intensity, "interval", minutes=15, id="conflict_intensity", misfire_grace_time=120, next_run_time=datetime.now())
 
     # Signal outcome tracking (check if SL/TP hit)
-    _scheduler.add_job(check_signal_outcomes, "interval", minutes=1, id="outcome_tracker", misfire_grace_time=30)
+    _scheduler.add_job(check_signal_outcomes, "interval", minutes=1, id="outcome_tracker", misfire_grace_time=30, next_run_time=datetime.now())
 
     # 15-minute interval fetchers
-    _scheduler.add_job(fetch_fear_greed, "interval", minutes=15, id="fear_greed", misfire_grace_time=120)
-    _scheduler.add_job(fetch_options_data, "interval", minutes=15, id="options", misfire_grace_time=120)
+    _scheduler.add_job(fetch_fear_greed, "interval", minutes=15, id="fear_greed", misfire_grace_time=120, next_run_time=datetime.now())
+    _scheduler.add_job(fetch_options_data, "interval", minutes=15, id="options", misfire_grace_time=120, next_run_time=datetime.now())
 
     _scheduler.start()
     logger.info("Scheduler started with %d jobs", len(_scheduler.get_jobs()))
