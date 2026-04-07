@@ -2,10 +2,12 @@ from models.schemas import IndicatorVote
 from models.enums import IndicatorCategory, VoteType
 
 CATEGORY_WEIGHTS = {
-    IndicatorCategory.ORDER_FLOW: 0.30,
-    IndicatorCategory.MACRO_DERIVATIVES: 0.25,
-    IndicatorCategory.ON_CHAIN: 0.25,
-    IndicatorCategory.SENTIMENT: 0.20,
+    IndicatorCategory.ORDER_FLOW: 0.20,
+    IndicatorCategory.MACRO_DERIVATIVES: 0.15,
+    IndicatorCategory.ON_CHAIN: 0.10,
+    IndicatorCategory.SENTIMENT: 0.10,
+    IndicatorCategory.TECHNICAL: 0.30,
+    IndicatorCategory.GEOPOLITICAL: 0.15,
 }
 
 MAX_STRENGTH = 3

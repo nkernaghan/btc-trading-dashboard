@@ -34,3 +34,4 @@ class IndicatorCategory(str, Enum):
     SENTIMENT = "SENTIMENT"
     TECHNICAL = "TECHNICAL"
     VOLATILITY = "VOLATILITY"
+    GEOPOLITICAL = "GEOPOLITICAL"

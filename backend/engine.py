@@ -7,11 +7,15 @@ from datetime import datetime, timezone
 from redis_client import get_redis
 from db import get_db
 from models.schemas import IndicatorVote
-from models.enums import IndicatorCategory, VoteType
+from models.enums import Direction, IndicatorCategory, VoteType
 from indicators.order_flow import calc_l4_depth_imbalance
+from indicators.technical_analysis import compute_technical_snapshot
+from indicators.confluence import calc_confluence
+from data.candles import fetch_candles, candles_to_arrays
 from scoring.composite import compute_composite_signal
 from scoring.signal_generator import generate_signal
 from api.websocket import broadcast_signal
+from nlp.sentiment_analyzer import analyze_headlines
 
 logger = logging.getLogger(__name__)
 
@@ -216,20 +220,10 @@ async def run_engine_cycle():
     if news_raw:
         articles = json.loads(news_raw)
         if articles and len(articles) > 0:
-            # Simple sentiment from news: count bullish vs bearish keywords
-            bull_kw = ["surge", "rally", "soar", "bullish", "record", "adoption", "approval", "reserve", "inflow"]
-            bear_kw = ["crash", "plunge", "dump", "bearish", "crackdown", "ban", "hack", "liquidation", "tariff", "war"]
-            bull_count = 0
-            bear_count = 0
-            for a in articles[:15]:
-                title = (a.get("title") or "").lower()
-                bull_count += sum(1 for kw in bull_kw if kw in title)
-                bear_count += sum(1 for kw in bear_kw if kw in title)
-            total = bull_count + bear_count
-            if total > 0:
-                sentiment = (bull_count - bear_count) / total  # -1 to +1
+            sentiment = analyze_headlines(articles, max_articles=20)
+            if abs(sentiment) > 0.05:  # Only vote if sentiment is meaningful
                 votes.append(vote("News Sentiment", IndicatorCategory.SENTIMENT, sentiment,
-                                  {"bull": (0.2, 1.0), "bear": (-1.0, -0.2)}))
+                                  {"bull": (0.15, 1.0), "bear": (-1.0, -0.15)}))
 
     if polymarket_raw:
         pm = json.loads(polymarket_raw)
@@ -238,57 +232,138 @@ async def run_engine_cycle():
             votes.append(vote("Polymarket", IndicatorCategory.SENTIMENT, len(pm),
                               {"bull": (5, 100), "bear": (0, 0)}))  # Neutral placeholder
 
-    # ==================== GEOPOLITICAL (GDELT) ====================
+    # ==================== GEOPOLITICAL (GDELT) — own category ====================
+    geo_crisis = False  # tracks if we should gate the signal
+
     if geo_tone_raw:
         tone = json.loads(geo_tone_raw)
         avg_tone = safe_float(tone.get("avg_tone_24h"), None)
         if avg_tone is not None:
-            # Negative tone = geopolitical tension = bearish for risk assets
-            votes.append(vote("Geo Tone", IndicatorCategory.SENTIMENT, avg_tone,
+            votes.append(vote("Geo Tone", IndicatorCategory.GEOPOLITICAL, avg_tone,
                               {"bull": (0, 10), "bear": (-10, -2)}))
             if avg_tone < -4:
                 warnings.append(f"Geopolitical tension elevated: tone {avg_tone:.1f}")
+            if avg_tone < -6:
+                geo_crisis = True
+                warnings.append("GEOPOLITICAL CRISIS: extreme negative tone — signal weakened")
 
     if geo_conflict_raw:
         conflict = json.loads(geo_conflict_raw)
         change = safe_float(conflict.get("change_pct"), None)
         if change is not None:
-            # Rising conflict volume = bearish
-            votes.append(vote("Conflict Vol", IndicatorCategory.SENTIMENT, change,
+            votes.append(vote("Conflict Vol", IndicatorCategory.GEOPOLITICAL, change,
                               {"bull": (-50, -10), "bear": (20, 200)}))
             if conflict.get("elevated"):
                 warnings.append(f"Conflict volume spike: +{change:.0f}%")
+            if change > 50:
+                geo_crisis = True
+                warnings.append("GEOPOLITICAL CRISIS: conflict volume surge — signal weakened")
 
     if geo_events_raw:
         events = json.loads(geo_events_raw)
         if isinstance(events, list) and len(events) > 0:
-            # Count bearish keywords in geopolitical headlines
-            bear_kw = ["war", "attack", "missile", "nuclear", "sanctions", "invasion", "bombing", "escalat"]
-            bull_kw = ["ceasefire", "peace", "deal", "agreement", "de-escalat"]
+            bear_kw = ["war", "attack", "missile", "nuclear", "sanctions", "invasion", "bombing",
+                        "escalat", "tariff", "retaliat", "strike", "troops", "mobiliz"]
+            bull_kw = ["ceasefire", "peace", "deal", "agreement", "de-escalat", "withdraw", "truce", "diplomac"]
             bear_count = sum(1 for e in events for kw in bear_kw if kw in (e.get("title", "")).lower())
             bull_count = sum(1 for e in events for kw in bull_kw if kw in (e.get("title", "")).lower())
             geo_sentiment = (bull_count - bear_count) / max(bear_count + bull_count, 1)
-            votes.append(vote("Geo Events", IndicatorCategory.SENTIMENT, geo_sentiment,
+            votes.append(vote("Geo Events", IndicatorCategory.GEOPOLITICAL, geo_sentiment,
                               {"bull": (0.2, 1.0), "bear": (-1.0, -0.2)}))
+            # Trump/tariff-specific detection
+            tariff_kw = ["tariff", "trade war", "liberation day", "reciprocal", "import tax", "duties"]
+            tariff_hits = sum(1 for e in events for kw in tariff_kw if kw in (e.get("title", "")).lower())
+            if tariff_hits >= 3:
+                votes.append(vote("Tariff Risk", IndicatorCategory.GEOPOLITICAL, -0.8,
+                                  {"bear": (-1.0, -0.3)}))
+                warnings.append(f"Tariff headlines dominating ({tariff_hits} mentions)")
+                geo_crisis = True
+
+    # ==================== TECHNICAL ANALYSIS (from real candle data) ====================
+    h1_candles = await fetch_candles("1h", limit=300)
+    h1_arrays = candles_to_arrays(h1_candles)
+    h1_opens, h1_highs, h1_lows, h1_closes, h1_volumes = h1_arrays
+
+    if len(h1_closes) >= 15:
+        h1_snapshot = compute_technical_snapshot(*h1_arrays)
+    else:
+        h1_snapshot = {
+            "rsi": 50.0, "ema_aligned": True, "structure": "neutral",
+            "atr": current_price * 0.007, "vol_regime": "normal",
+            "macd_histogram": 0.0, "ema_21": current_price,
+            "ema_55": current_price, "ema_200": current_price,
+        }
+
+    rsi_val = h1_snapshot["rsi"]
+    ema_aligned = h1_snapshot["ema_aligned"]
+    structure = h1_snapshot["structure"]
+    atr_val = h1_snapshot["atr"]
+    vol_regime = h1_snapshot["vol_regime"]
+
+    # Add technical indicator votes
+    votes.append(vote("RSI", IndicatorCategory.TECHNICAL, rsi_val,
+                       {"bull": (20, 45), "bear": (55, 80)}))
+    votes.append(vote("MACD Hist", IndicatorCategory.TECHNICAL, h1_snapshot["macd_histogram"],
+                       {"bull": (0.1, 10000), "bear": (-10000, -0.1)}))
+
+    if rsi_val > 80:
+        warnings.append(f"RSI overbought at {rsi_val:.1f}")
+    elif rsi_val < 20:
+        warnings.append(f"RSI oversold at {rsi_val:.1f}")
+
+    if structure != "neutral":
+        votes.append(vote("Structure", IndicatorCategory.TECHNICAL, 1.0 if structure == "bullish" else -1.0,
+                           {"bull": (0.5, 1.0), "bear": (-1.0, -0.5)}))
+
+    # ==================== MULTI-TIMEFRAME CONFLUENCE ====================
+    h4_candles = await fetch_candles("4h", limit=200)
+    d1_candles = await fetch_candles("1d", limit=200)
+
+    def _direction_from_snapshot(snap: dict) -> VoteType:
+        if snap["rsi"] > 55 and snap["macd_histogram"] > 0:
+            return VoteType.BULL
+        elif snap["rsi"] < 45 and snap["macd_histogram"] < 0:
+            return VoteType.BEAR
+        return VoteType.NEUTRAL
+
+    h1_dir = _direction_from_snapshot(h1_snapshot)
+
+    h4_arrays = candles_to_arrays(h4_candles)
+    if len(h4_arrays[3]) >= 15:
+        h4_snapshot = compute_technical_snapshot(*h4_arrays)
+        h4_dir = _direction_from_snapshot(h4_snapshot)
+    else:
+        h4_dir = VoteType.NEUTRAL
+
+    d1_arrays = candles_to_arrays(d1_candles)
+    if len(d1_arrays[3]) >= 15:
+        d1_snapshot = compute_technical_snapshot(*d1_arrays)
+        d1_dir = _direction_from_snapshot(d1_snapshot)
+    else:
+        d1_dir = VoteType.NEUTRAL
+
+    confluence_count, confluence_bonus = calc_confluence(h1_dir, h4_dir, d1_dir)
 
     # ==================== COMPOSITE SCORING ====================
-    confluence_count = 2
-    confluence_bonus = 5
-    rsi_val = 55.0  # TODO: compute from actual candle history
-    ema_aligned = True
-    structure = "neutral"
-
     result = compute_composite_signal(
         votes=votes, confluence_count=confluence_count,
         confluence_bonus=confluence_bonus, rsi=rsi_val,
         ema_aligned=ema_aligned, structure=structure,
     )
 
-    atr_val = current_price * 0.007
-    vol_regime = "normal"
+    # Geopolitical crisis gate — weakens score and caps leverage during extreme events
+    final_score = result["score"]
+    final_direction = result["direction"]
+    if geo_crisis:
+        final_score = final_score * 0.6  # 40% penalty
+        if final_score < 50:
+            final_direction = Direction.WAIT
+        # Force vol_regime to at least "high" during crisis (caps leverage)
+        if vol_regime in ("low", "normal"):
+            vol_regime = "high"
 
     signal = generate_signal(
-        direction=result["direction"], score=result["score"],
+        direction=final_direction, score=final_score,
         current_price=current_price, atr=atr_val,
         vol_regime=vol_regime, confluence_count=result["confluence_count"],
         votes=votes, warnings=warnings,

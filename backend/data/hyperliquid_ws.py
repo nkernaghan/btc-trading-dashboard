@@ -70,7 +70,7 @@ def parse_candle_msg(msg: dict) -> dict:
     """
     d = msg.get("data", {})
     return {
-        "timestamp": int(d["t"]),
+        "time": int(d["t"]) // 1000,
         "open": float(d["o"]),
         "high": float(d["h"]),
         "low": float(d["l"]),
@@ -115,7 +115,7 @@ async def run_hyperliquid_ws():
                                     "btc:price", json.dumps(latest)
                                 )
                                 await r.publish(
-                                    "btc:price:stream", json.dumps(trades)
+                                    "btc:price:stream", json.dumps(latest)
                                 )
 
                         elif channel == "l2Book":

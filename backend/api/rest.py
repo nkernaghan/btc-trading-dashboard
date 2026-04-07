@@ -168,4 +168,19 @@ async def _fetch_hyperliquid_candles(interval: str, limit: int):
 
 @router.post("/backtest")
 async def run_backtest(request: BacktestRequest):
-    return {"status": "backtest endpoint ready", "params": request.model_dump()}
+    """Run a walk-forward technical backtest on historical candles.
+
+    Uses only technical indicators (RSI, MACD, EMA, structure) since
+    historical macro/sentiment data is not available.
+    """
+    from backtest.simulator import run_historical_backtest
+
+    results = await run_historical_backtest(
+        min_score=request.min_confidence,
+    )
+    return results
+
+@router.get("/signals/accuracy")
+async def get_accuracy(limit: int = Query(100, le=1000)):
+    from scoring.outcome_tracker import get_signal_accuracy
+    return await get_signal_accuracy(limit)

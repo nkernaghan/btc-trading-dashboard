@@ -117,7 +117,7 @@ def test_parse_candle_msg():
         },
     }
     candle = parse_candle_msg(raw)
-    assert candle["timestamp"] == 1700000000000
+    assert candle["time"] == 1700000000
     assert candle["open"] == 67200.0
     assert candle["high"] == 67500.0
     assert candle["low"] == 67100.0

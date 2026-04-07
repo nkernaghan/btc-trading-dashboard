@@ -1,7 +1,7 @@
 import { Timeframe } from './types';
 
-export const API_BASE = 'http://localhost:8000';
-export const WS_URL = 'ws://localhost:8000/ws';
+export const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+export const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000/ws';
 
 export const COLORS = {
   long: '#26a69a',

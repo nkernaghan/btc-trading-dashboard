@@ -16,13 +16,21 @@ async def websocket_endpoint(ws: WebSocket):
     try:
         r = await get_redis()
         pubsub = r.pubsub()
-        await pubsub.subscribe("btc:trades", "btc:orderbook", "btc:candle", "btc:signal")
+        await pubsub.subscribe("btc:price:stream", "btc:orderbook:stream", "btc:candle:stream", "btc:signal")
 
         async def listen_redis():
             async for message in pubsub.listen():
                 if message["type"] == "message":
                     try:
-                        await ws.send_json({"channel": message["channel"], "data": json.loads(message["data"])})
+                        # Map Redis channel names to frontend-expected channel names
+                        channel_map = {
+                            "btc:price:stream": "btc:trades",
+                            "btc:orderbook:stream": "btc:orderbook",
+                            "btc:candle:stream": "btc:candle",
+                            "btc:signal": "btc:signal",
+                        }
+                        frontend_channel = channel_map.get(message["channel"], message["channel"])
+                        await ws.send_json({"channel": frontend_channel, "payload": json.loads(message["data"])})
                     except Exception:
                         break
 

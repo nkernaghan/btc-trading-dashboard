@@ -11,6 +11,7 @@ from data.onchain import fetch_onchain, fetch_stablecoin_reserves
 from data.news import fetch_news_api, fetch_etf_flows
 from data.options import fetch_options_data
 from data.geopolitical import fetch_geopolitical_events, fetch_geopolitical_tone, fetch_conflict_intensity
+from scoring.outcome_tracker import check_signal_outcomes
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,9 @@ def start_scheduler() -> AsyncIOScheduler:
     _scheduler.add_job(fetch_geopolitical_events, "interval", minutes=10, id="geopolitical_events", misfire_grace_time=120)
     _scheduler.add_job(fetch_geopolitical_tone, "interval", minutes=15, id="geopolitical_tone", misfire_grace_time=120)
     _scheduler.add_job(fetch_conflict_intensity, "interval", minutes=15, id="conflict_intensity", misfire_grace_time=120)
+
+    # Signal outcome tracking (check if SL/TP hit)
+    _scheduler.add_job(check_signal_outcomes, "interval", minutes=1, id="outcome_tracker", misfire_grace_time=30)
 
     # 15-minute interval fetchers
     _scheduler.add_job(fetch_fear_greed, "interval", minutes=15, id="fear_greed", misfire_grace_time=120)
