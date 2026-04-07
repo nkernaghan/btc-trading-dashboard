@@ -575,6 +575,10 @@ export default function MainChart() {
         });
       }
     }
+    // Auto-fit chart to show all candles after data load
+    if (chartRef.current) {
+      chartRef.current.timeScale().fitContent();
+    }
   }, [candles, indicators.halving, indicators.sr]);
 
   // ─── Sync series visibility when toggles change ──────────────────────────
