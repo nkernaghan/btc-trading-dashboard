@@ -250,16 +250,23 @@ async def run_engine_cycle():
                 votes.append(vote("Polymarket", IndicatorCategory.SENTIMENT, avg_prob,
                                   {"bull": (0.6, 1.0), "bear": (0.0, 0.4)}))
 
-    # ==================== ETF FLOWS ====================
+    # ==================== ETF FLOWS (IBIT/FBTC/GBTC via Yahoo Finance) ====================
     if etf_raw:
         etf = json.loads(etf_raw)
-        btc_vol = safe_float(etf.get("btc_total_volume"), None)
-        btc_mcap = safe_float(etf.get("btc_market_cap"), None)
-        if btc_vol is not None and btc_mcap is not None and btc_mcap > 0:
-            # Volume/mcap ratio as activity proxy — high volume = conviction
-            vol_ratio = (btc_vol / btc_mcap) * 100  # as percentage
-            votes.append(vote("BTC Volume", IndicatorCategory.MACRO_DERIVATIVES, vol_ratio,
-                              {"bull": (5, 50), "bear": (0, 1.5)}))
+        flow_score = safe_float(etf.get("flow_score"), None)
+        etf_vol_ratio = safe_float(etf.get("total_volume_ratio"), None)
+
+        if flow_score is not None:
+            # flow_score: -1 (heavy selling) to +1 (heavy buying)
+            votes.append(vote("ETF Flow", IndicatorCategory.MACRO_DERIVATIVES, flow_score,
+                              {"bull": (0.15, 1.0), "bear": (-1.0, -0.15)}))
+
+        if etf_vol_ratio is not None and etf_vol_ratio > 1.8:
+            warnings.append(f"ETF volume spike: {etf_vol_ratio:.1f}x average — institutional activity")
+
+        for e in etf.get("etfs", []):
+            if e.get("volume_ratio", 0) > 2.5:
+                warnings.append(f"{e['ticker']} volume {e['volume_ratio']:.1f}x avg ({e['price_change_pct']:+.1f}%)")
 
     # ==================== OKX DERIVATIVES ====================
     if okx_funding_raw:

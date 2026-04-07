@@ -13,6 +13,7 @@ from data.options import fetch_options_data
 from data.geopolitical import fetch_geopolitical_events, fetch_geopolitical_tone, fetch_conflict_intensity
 from data.okx import fetch_okx_funding, fetch_okx_open_interest
 from data.binance import fetch_binance_funding, fetch_binance_oi
+from data.etf import fetch_etf_flows
 from data.coinalyze import (
     fetch_coinalyze_liquidations, fetch_coinalyze_oi,
     fetch_coinalyze_funding, fetch_coinalyze_long_short,
@@ -62,6 +63,9 @@ def start_scheduler() -> AsyncIOScheduler:
     _scheduler.add_job(fetch_stablecoin_flows, "interval", minutes=15, id="stablecoin_flows", misfire_grace_time=120)
     _scheduler.add_job(fetch_defi_tvl, "interval", minutes=15, id="defi_tvl", misfire_grace_time=120)
     _scheduler.add_job(fetch_hashrate_difficulty, "interval", minutes=15, id="hashrate", misfire_grace_time=120)
+
+    # ETF flow proxy (Yahoo Finance — free, no key)
+    _scheduler.add_job(fetch_etf_flows, "interval", minutes=15, id="etf_flows", misfire_grace_time=120)
 
     # Geopolitical data (GDELT — free, no key)
     _scheduler.add_job(fetch_geopolitical_events, "interval", minutes=10, id="geopolitical_events", misfire_grace_time=120)
