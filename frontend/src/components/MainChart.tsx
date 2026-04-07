@@ -127,7 +127,8 @@ export default function MainChart() {
 
   const [indicators, setIndicators] = useState<IndicatorState>(DEFAULT_INDICATORS);
 
-  const { candles } = useDashboardStore();
+  const { candles, timeframe } = useDashboardStore();
+  const prevTimeframeRef = useRef(timeframe);
 
   // ─── Chart initialisation ────────────────────────────────────────────────
   useEffect(() => {
@@ -575,11 +576,12 @@ export default function MainChart() {
         });
       }
     }
-    // Auto-fit chart to show all candles after data load
-    if (chartRef.current) {
+    // Auto-fit only when timeframe changes (not on every candle update)
+    if (chartRef.current && timeframe !== prevTimeframeRef.current) {
       chartRef.current.timeScale().fitContent();
+      prevTimeframeRef.current = timeframe;
     }
-  }, [candles, indicators.halving, indicators.sr]);
+  }, [candles, indicators.halving, indicators.sr, timeframe]);
 
   // ─── Sync series visibility when toggles change ──────────────────────────
   useEffect(() => {
