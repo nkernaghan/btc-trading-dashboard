@@ -21,6 +21,7 @@ export function useWebSocket() {
     setFundingRate,
     setOpenInterest,
     setOiDelta,
+    timeframe,
   } = useDashboardStore();
 
   useEffect(() => {
@@ -53,14 +54,17 @@ export function useWebSocket() {
               break;
 
             case 'btc:candle':
-              addCandle({
-                time: payload.time,
-                open: payload.open,
-                high: payload.high,
-                low: payload.low,
-                close: payload.close,
-                volume: payload.volume,
-              });
+              // WS streams 1H candles only — skip if viewing a different timeframe
+              if (timeframe === '1H') {
+                addCandle({
+                  time: payload.time,
+                  open: payload.open,
+                  high: payload.high,
+                  low: payload.low,
+                  close: payload.close,
+                  volume: payload.volume,
+                });
+              }
               break;
 
             case 'btc:signal':
@@ -97,6 +101,6 @@ export function useWebSocket() {
   }, [
     setPrice, setPrice24hChange, setHigh24h, setLow24h,
     addCandle, setOrderbook, setSignal, setVotes, setWarnings,
-    setFundingRate, setOpenInterest, setOiDelta,
+    setFundingRate, setOpenInterest, setOiDelta, timeframe,
   ]);
 }
