@@ -12,6 +12,7 @@ from data.news import fetch_news_api
 from data.options import fetch_options_data
 from data.geopolitical import fetch_geopolitical_events, fetch_geopolitical_tone, fetch_conflict_intensity
 from data.okx import fetch_okx_funding, fetch_okx_open_interest
+from data.binance import fetch_binance_funding, fetch_binance_oi
 from data.coinalyze import (
     fetch_coinalyze_liquidations, fetch_coinalyze_oi,
     fetch_coinalyze_funding, fetch_coinalyze_long_short,
@@ -44,6 +45,10 @@ def start_scheduler() -> AsyncIOScheduler:
     # OKX derivatives data (free, no key)
     _scheduler.add_job(fetch_okx_funding, "interval", minutes=5, id="okx_funding", misfire_grace_time=60)
     _scheduler.add_job(fetch_okx_open_interest, "interval", minutes=5, id="okx_oi", misfire_grace_time=60)
+
+    # Binance USDM futures (free, no key)
+    _scheduler.add_job(fetch_binance_funding, "interval", minutes=5, id="binance_funding", misfire_grace_time=60)
+    _scheduler.add_job(fetch_binance_oi, "interval", minutes=5, id="binance_oi", misfire_grace_time=60)
 
     # Coinalyze aggregated derivatives (free key, 40 req/min)
     _scheduler.add_job(fetch_coinalyze_liquidations, "interval", minutes=5, id="ca_liquidations", misfire_grace_time=60)

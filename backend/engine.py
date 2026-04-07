@@ -16,6 +16,7 @@ from scoring.composite import compute_composite_signal
 from scoring.signal_generator import generate_signal
 from api.websocket import broadcast_signal
 from nlp.sentiment_analyzer import analyze_headlines
+from indicators.market_structure import detect_cme_gaps
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +64,8 @@ async def run_engine_cycle():
     etf_raw = await r.get("etf:flows")
     okx_funding_raw = await r.get("okx:funding")
     okx_oi_raw = await r.get("okx:open_interest")
+    binance_funding_raw = await r.get("binance:funding")
+    binance_oi_raw = await r.get("binance:open_interest")
     ca_liq_raw = await r.get("coinalyze:liquidations")
     ca_oi_raw = await r.get("coinalyze:oi")
     ca_funding_raw = await r.get("coinalyze:funding")
@@ -316,6 +319,27 @@ async def run_engine_cycle():
             votes.append(vote("Agg L/S Ratio", IndicatorCategory.MACRO_DERIVATIVES, ls_ratio,
                               {"bull": (0.2, 0.7), "bear": (1.5, 5.0)}))
 
+    # ==================== BINANCE DERIVATIVES ====================
+    if binance_funding_raw:
+        bn_f = json.loads(binance_funding_raw)
+        bn_rate = safe_float(bn_f.get("rate"), None)
+        if bn_rate is not None:
+            # Negative funding = shorts paying longs = contrarian bullish signal
+            # High positive funding = overcrowded longs = bearish signal
+            votes.append(vote("Binance Funding", IndicatorCategory.MACRO_DERIVATIVES, bn_rate,
+                              {"bull": (-0.1, -0.0001), "bear": (0.0005, 0.1)}))
+            if bn_rate > 0.001:
+                warnings.append(f"Binance funding rate elevated: {bn_rate * 100:.4f}%")
+
+    if binance_oi_raw:
+        bn_oi = json.loads(binance_oi_raw)
+        bn_oi_change = safe_float(bn_oi.get("oi_change_pct"), None)
+        if bn_oi_change is not None:
+            # Rising OI = new positions opening = trend confirmation
+            # Falling OI = positions unwinding = weakening momentum
+            votes.append(vote("Binance OI Change", IndicatorCategory.MACRO_DERIVATIVES, bn_oi_change,
+                              {"bull": (2, 50), "bear": (-50, -2)}))
+
     # ==================== STABLECOIN FLOWS (DeFiLlama) ====================
     if stablecoin_flows_raw:
         sc_flows = json.loads(stablecoin_flows_raw)
@@ -481,6 +505,47 @@ async def run_engine_cycle():
         d1_dir = VoteType.NEUTRAL
 
     confluence_count, confluence_bonus = calc_confluence(h1_dir, h4_dir, d1_dir)
+
+    # ==================== CME GAP DETECTION ====================
+    if len(d1_candles) >= 30:
+        from datetime import datetime as dt
+        daily_closes = []
+        for c in d1_candles[-90:]:  # last 90 days
+            ts = int(c["t"]) // 1000 if isinstance(c.get("t"), (int, float)) else c.get("time", 0)
+            date_str = dt.fromtimestamp(ts).strftime("%Y-%m-%d") if ts else ""
+            daily_closes.append({
+                "date": date_str,
+                "close": float(c.get("c", c.get("close", 0))),
+                "open": float(c.get("o", c.get("open", 0))),
+            })
+
+        cme_gaps = detect_cme_gaps(daily_closes, current_price)
+        unfilled_gaps = [g for g in cme_gaps if not g["filled"]]
+
+        if unfilled_gaps:
+            # Find the nearest unfilled gap
+            nearest = min(unfilled_gaps, key=lambda g: min(abs(current_price - g["low"]), abs(current_price - g["high"])))
+            gap_mid = (nearest["low"] + nearest["high"]) / 2
+            gap_dist_pct = (current_price - gap_mid) / current_price * 100
+
+            # CME gaps tend to fill — price is drawn toward them
+            # If gap is below: bearish magnet (price likely to drop to fill)
+            # If gap is above: bullish magnet (price likely to rise to fill)
+            if nearest["direction"] == "up" and current_price > nearest["high"]:
+                # Unfilled gap below — bearish gravity
+                votes.append(vote("CME Gap Below", IndicatorCategory.TECHNICAL, gap_dist_pct,
+                                   {"bear": (0.5, 20)}))
+                warnings.append(f"Unfilled CME gap below at ${nearest['low']:,.0f}-${nearest['high']:,.0f} ({nearest['date']})")
+            elif nearest["direction"] == "down" and current_price < nearest["low"]:
+                # Unfilled gap above — bullish gravity
+                votes.append(vote("CME Gap Above", IndicatorCategory.TECHNICAL, abs(gap_dist_pct),
+                                   {"bull": (0.5, 20)}))
+                warnings.append(f"Unfilled CME gap above at ${nearest['low']:,.0f}-${nearest['high']:,.0f} ({nearest['date']})")
+
+            # Warn if price is inside a gap (partially filled)
+            for g in unfilled_gaps:
+                if g["low"] <= current_price <= g["high"]:
+                    warnings.append(f"Price INSIDE CME gap ${g['low']:,.0f}-${g['high']:,.0f} — likely to complete fill")
 
     # ==================== COMPOSITE SCORING ====================
     result = compute_composite_signal(
