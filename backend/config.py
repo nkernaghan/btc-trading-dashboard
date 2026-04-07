@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     deribit_client_id: str = ""
     deribit_client_secret: str = ""
     coingecko_api_key: str = ""
+    coinalyze_api_key: str = ""
 
     class Config:
         env_file = ".env"

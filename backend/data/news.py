@@ -10,6 +10,12 @@ import httpx
 from config import settings
 from redis_client import get_redis
 
+
+def _cg_headers() -> dict:
+    if settings.coingecko_api_key:
+        return {"x-cg-demo-api-key": settings.coingecko_api_key}
+    return {}
+
 logger = logging.getLogger(__name__)
 
 BTC_KEYWORDS = [
@@ -142,6 +148,7 @@ async def fetch_etf_flows():
                         "ids": "bitcoin",
                         "order": "market_cap_desc",
                     },
+                    headers=_cg_headers(),
                 )
                 resp.raise_for_status()
                 data = resp.json()

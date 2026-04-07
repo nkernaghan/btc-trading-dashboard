@@ -60,6 +60,18 @@ async def run_engine_cycle():
     coinglass_raw = await r.get("coinglass:data")
     stablecoin_raw = await r.get("onchain:stablecoin")
     news_raw = await r.get("news:articles")
+    etf_raw = await r.get("etf:flows")
+    okx_funding_raw = await r.get("okx:funding")
+    okx_oi_raw = await r.get("okx:open_interest")
+    ca_liq_raw = await r.get("coinalyze:liquidations")
+    ca_oi_raw = await r.get("coinalyze:oi")
+    ca_funding_raw = await r.get("coinalyze:funding")
+    ca_ls_raw = await r.get("coinalyze:long_short")
+    stablecoin_flows_raw = await r.get("defi:stablecoin_flows")
+    defi_tvl_raw = await r.get("defi:tvl")
+    hashrate_raw = await r.get("mining:hashrate")
+    whale_txs_raw = await r.get("onchain:whale_txs")
+    tx_volume_raw = await r.get("onchain:tx_volume")
     geo_tone_raw = await r.get("geopolitical:tone")
     geo_conflict_raw = await r.get("geopolitical:conflict")
     geo_events_raw = await r.get("geopolitical:events")
@@ -103,7 +115,7 @@ async def run_engine_cycle():
             ("SPX", "S&P 500", (0.1, 10), (-10, -0.1)),   # SPX up = BTC bullish
             ("NQ", "Nasdaq", (0.1, 10), (-10, -0.1)),
             ("US10Y", "US 10Y", (-10, -0.05), (0.05, 10)),  # Yields up = bearish
-            ("GOLD", "Gold", (-10, -0.2), (0.2, 10)),     # Gold up = risk-off = bearish for BTC
+            ("Gold", "Gold", (-10, -0.2), (0.2, 10)),     # Gold up = risk-off = bearish for BTC
         ]:
             if key in macro:
                 change = safe_float(macro[key].get("change_pct"), None)
@@ -125,7 +137,7 @@ async def run_engine_cycle():
             if iv > 80:
                 warnings.append(f"IV elevated at {iv:.0f}%")
 
-        max_pain = safe_float(options.get("max_pain"), None)
+        max_pain = safe_float(options.get("max_pain_strike"), None)
         if max_pain is not None and max_pain > 0:
             dist_to_max_pain = (current_price - max_pain) / max_pain * 100
             votes.append(vote("Max Pain Dist", IndicatorCategory.MACRO_DERIVATIVES, dist_to_max_pain,
@@ -160,10 +172,8 @@ async def run_engine_cycle():
     if onchain_raw:
         onchain = json.loads(onchain_raw)
 
-        net_flow = safe_float(onchain.get("net_exchange_flow"), None)
-        if net_flow is not None:
-            votes.append(vote("Exch Net Flow", IndicatorCategory.ON_CHAIN, net_flow,
-                              {"bull": (-1e10, -100), "bear": (100, 1e10)}))
+        # net_exchange_flow is currently a proxy (hardcoded 0) — skip until real data source available
+        # net_flow = safe_float(onchain.get("net_exchange_flow"), None)
 
         mvrv = safe_float(onchain.get("mvrv"), None)
         if mvrv is not None:
@@ -178,16 +188,16 @@ async def run_engine_cycle():
                               {"bull": (0.9, 1.0), "bear": (1.05, 2.0)}))
 
         miner_outflow = safe_float(onchain.get("miner_outflow"), None)
-        if miner_outflow is not None:
+        if miner_outflow is not None and miner_outflow > 0:
+            # Normalize: typical daily miner revenue is 400-900 BTC
+            # Low outflow (<400 BTC) = miners holding = bullish
+            # High outflow (>800 BTC) = miners selling = bearish
             votes.append(vote("Miner Outflow", IndicatorCategory.ON_CHAIN, miner_outflow,
-                              {"bull": (0, 0.8), "bear": (1.5, 10)}))
+                              {"bull": (1, 400), "bear": (800, 5000)}))
 
-        inflow = safe_float(onchain.get("exchange_inflow"), None)
-        outflow = safe_float(onchain.get("exchange_outflow"), None)
-        if inflow is not None and outflow is not None and inflow > 0:
-            flow_ratio = outflow / inflow
-            votes.append(vote("Outflow/Inflow", IndicatorCategory.ON_CHAIN, flow_ratio,
-                              {"bull": (1.1, 10), "bear": (0.1, 0.9)}))
+        # Outflow/Inflow ratio is currently fake (always 1.0) — skip until real data source available
+        # inflow = safe_float(onchain.get("exchange_inflow"), None)
+        # outflow = safe_float(onchain.get("exchange_outflow"), None)
 
     if dominance_raw:
         dom = json.loads(dominance_raw)
@@ -198,11 +208,12 @@ async def run_engine_cycle():
 
     if stablecoin_raw:
         sc = json.loads(stablecoin_raw)
-        usdt_mcap = safe_float(sc.get("usdt_market_cap"), None)
-        if usdt_mcap is not None:
-            # Growing stablecoin supply = bullish (more buying power)
-            votes.append(vote("USDT Supply", IndicatorCategory.ON_CHAIN, usdt_mcap / 1e9,
-                              {"bull": (100, 500), "bear": (0, 50)}))
+        usdt_change = safe_float(sc.get("usdt_mcap_change_pct"), None)
+        if usdt_change is not None and usdt_change != 0:
+            # Growing stablecoin supply = bullish (more buying power entering)
+            # Shrinking = bearish (capital leaving)
+            votes.append(vote("USDT Supply Chg", IndicatorCategory.ON_CHAIN, usdt_change,
+                              {"bull": (0.05, 10), "bear": (-10, -0.05)}))
 
     # ==================== SENTIMENT ====================
     if fg_raw:
@@ -228,9 +239,136 @@ async def run_engine_cycle():
     if polymarket_raw:
         pm = json.loads(polymarket_raw)
         if isinstance(pm, list) and len(pm) > 0:
-            # Just signal that polymarket data exists
-            votes.append(vote("Polymarket", IndicatorCategory.SENTIMENT, len(pm),
-                              {"bull": (5, 100), "bear": (0, 0)}))  # Neutral placeholder
+            # Average the "yes" probability across BTC-related prediction markets
+            # High avg yes_price on bullish questions = market expects upside
+            prices = [m["yes_price"] for m in pm if m.get("yes_price") is not None]
+            if prices:
+                avg_prob = sum(prices) / len(prices)
+                votes.append(vote("Polymarket", IndicatorCategory.SENTIMENT, avg_prob,
+                                  {"bull": (0.6, 1.0), "bear": (0.0, 0.4)}))
+
+    # ==================== ETF FLOWS ====================
+    if etf_raw:
+        etf = json.loads(etf_raw)
+        btc_vol = safe_float(etf.get("btc_total_volume"), None)
+        btc_mcap = safe_float(etf.get("btc_market_cap"), None)
+        if btc_vol is not None and btc_mcap is not None and btc_mcap > 0:
+            # Volume/mcap ratio as activity proxy — high volume = conviction
+            vol_ratio = (btc_vol / btc_mcap) * 100  # as percentage
+            votes.append(vote("BTC Volume", IndicatorCategory.MACRO_DERIVATIVES, vol_ratio,
+                              {"bull": (5, 50), "bear": (0, 1.5)}))
+
+    # ==================== OKX DERIVATIVES ====================
+    if okx_funding_raw:
+        okx_f = json.loads(okx_funding_raw)
+        okx_avg_rate = safe_float(okx_f.get("avg_rate"), None)
+        if okx_avg_rate is not None:
+            # Negative funding = shorts paying longs = contrarian bullish
+            # High positive funding = crowded longs = bearish
+            votes.append(vote("OKX Funding", IndicatorCategory.MACRO_DERIVATIVES, okx_avg_rate,
+                              {"bull": (-0.1, -0.0001), "bear": (0.0005, 0.1)}))
+            if okx_avg_rate > 0.001:
+                warnings.append(f"OKX funding rate elevated: {okx_avg_rate*100:.4f}%")
+
+    if okx_oi_raw:
+        okx_oi = json.loads(okx_oi_raw)
+        okx_oi_change = safe_float(okx_oi.get("oi_change_pct"), None)
+        if okx_oi_change is not None and okx_oi_change != 0:
+            # Rising OI with price = trend confirmation (directional from context)
+            # Falling OI = positions closing = less conviction
+            votes.append(vote("OKX OI Change", IndicatorCategory.MACRO_DERIVATIVES, okx_oi_change,
+                              {"bull": (2, 50), "bear": (-50, -2)}))
+
+    # ==================== COINALYZE AGGREGATED DERIVATIVES ====================
+    if ca_liq_raw:
+        ca_liq = json.loads(ca_liq_raw)
+        net_liq = safe_float(ca_liq.get("net_liquidations_usd"), None)
+        total_liq = safe_float(ca_liq.get("total_liquidations_usd"), None)
+        if net_liq is not None and total_liq is not None and total_liq > 0:
+            # Positive net = more longs liquidated = bearish pressure
+            # Negative net = more shorts liquidated = bullish pressure
+            # Normalize: net / total gives -1 to 1 scale
+            liq_ratio = net_liq / total_liq
+            votes.append(vote("Liquidations", IndicatorCategory.ORDER_FLOW, liq_ratio,
+                              {"bull": (-1.0, -0.2), "bear": (0.2, 1.0)}))
+            if total_liq > 50_000_000:  # $50M+ liquidations
+                warnings.append(f"Heavy liquidations: ${total_liq/1e6:.0f}M ({ca_liq.get('dominant_side', '?')} dominant)")
+
+    if ca_oi_raw:
+        ca_oi = json.loads(ca_oi_raw)
+        ca_oi_change = safe_float(ca_oi.get("oi_change_pct"), None)
+        if ca_oi_change is not None and ca_oi_change != 0:
+            votes.append(vote("Agg OI Change", IndicatorCategory.MACRO_DERIVATIVES, ca_oi_change,
+                              {"bull": (2, 50), "bear": (-50, -2)}))
+
+    if ca_funding_raw:
+        ca_fund = json.loads(ca_funding_raw)
+        ca_rate = safe_float(ca_fund.get("funding_rate"), None)
+        if ca_rate is not None:
+            votes.append(vote("Agg Funding", IndicatorCategory.MACRO_DERIVATIVES, ca_rate,
+                              {"bull": (-0.1, -0.0001), "bear": (0.0005, 0.1)}))
+
+    if ca_ls_raw:
+        ca_ls = json.loads(ca_ls_raw)
+        ls_ratio = safe_float(ca_ls.get("ratio"), None)
+        if ls_ratio is not None:
+            # Contrarian: crowded longs (ratio > 1.5) = bearish, crowded shorts (< 0.7) = bullish
+            votes.append(vote("Agg L/S Ratio", IndicatorCategory.MACRO_DERIVATIVES, ls_ratio,
+                              {"bull": (0.2, 0.7), "bear": (1.5, 5.0)}))
+
+    # ==================== STABLECOIN FLOWS (DeFiLlama) ====================
+    if stablecoin_flows_raw:
+        sc_flows = json.loads(stablecoin_flows_raw)
+        total_1d = safe_float(sc_flows.get("total_1d_change_pct"), None)
+        if total_1d is not None and total_1d != 0:
+            # Growing stablecoin supply = new capital entering = bullish
+            votes.append(vote("Stablecoin Flow", IndicatorCategory.ON_CHAIN, total_1d,
+                              {"bull": (0.05, 5), "bear": (-5, -0.05)}))
+
+    # ==================== DEFI TVL ====================
+    if defi_tvl_raw:
+        tvl = json.loads(defi_tvl_raw)
+        tvl_1d = safe_float(tvl.get("tvl_1d_change_pct"), None)
+        if tvl_1d is not None and tvl_1d != 0:
+            # Rising DeFi TVL = capital flowing into crypto ecosystem = bullish
+            votes.append(vote("DeFi TVL", IndicatorCategory.ON_CHAIN, tvl_1d,
+                              {"bull": (0.5, 20), "bear": (-20, -0.5)}))
+
+    # ==================== MINING / HASHRATE ====================
+    if hashrate_raw:
+        mining = json.loads(hashrate_raw)
+        hr_change = safe_float(mining.get("hashrate_7d_change_pct"), None)
+        if hr_change is not None:
+            # Rising hashrate = miners bullish on future profitability
+            votes.append(vote("Hashrate", IndicatorCategory.ON_CHAIN, hr_change,
+                              {"bull": (2, 50), "bear": (-50, -5)}))
+
+        diff_change = safe_float(mining.get("next_difficulty_change_pct"), None)
+        if diff_change is not None and abs(diff_change) > 1:
+            # Large upcoming difficulty increase = miners deploying more hardware = bullish
+            votes.append(vote("Difficulty Adj", IndicatorCategory.ON_CHAIN, diff_change,
+                              {"bull": (3, 30), "bear": (-30, -3)}))
+
+    # ==================== WHALE TRANSACTIONS ====================
+    if whale_txs_raw:
+        whales = json.loads(whale_txs_raw)
+        whale_count = whales.get("whale_tx_count", 0)
+        whale_btc = safe_float(whales.get("total_whale_btc"), None)
+        if whale_count > 0 and whale_btc is not None:
+            # High whale activity during fear = accumulation = bullish
+            # High whale activity during greed = distribution = bearish
+            # Use count as a raw activity signal — high activity = volatility incoming
+            if whale_count >= 5:
+                warnings.append(f"Whale activity: {whale_count} txs, {whale_btc:.0f} BTC")
+
+    # ==================== ON-CHAIN TX VOLUME ====================
+    if tx_volume_raw:
+        tx_vol = json.loads(tx_volume_raw)
+        vol_change = safe_float(tx_vol.get("volume_1d_change_pct"), None)
+        if vol_change is not None and abs(vol_change) > 5:
+            # Surging on-chain volume = increased activity/settlement
+            votes.append(vote("On-chain Volume", IndicatorCategory.ON_CHAIN, vol_change,
+                              {"bull": (10, 200), "bear": (-200, -10)}))
 
     # ==================== GEOPOLITICAL (GDELT) — own category ====================
     geo_crisis = False  # tracks if we should gate the signal

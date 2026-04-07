@@ -5,7 +5,15 @@ import logging
 
 import httpx
 
+from config import settings
 from redis_client import get_redis
+
+
+def _cg_headers() -> dict:
+    """Return CoinGecko headers with API key if configured."""
+    if settings.coingecko_api_key:
+        return {"x-cg-demo-api-key": settings.coingecko_api_key}
+    return {}
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +45,7 @@ async def fetch_btc_dominance():
     """Fetch BTC dominance from CoinGecko global API, store in Redis."""
     try:
         async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.get("https://api.coingecko.com/api/v3/global")
+            resp = await client.get("https://api.coingecko.com/api/v3/global", headers=_cg_headers())
             resp.raise_for_status()
             data = resp.json()
 
@@ -59,33 +67,44 @@ async def fetch_btc_dominance():
 
 
 async def fetch_polymarket():
-    """Fetch crypto-related markets from Polymarket Gamma API, store in Redis."""
+    """Fetch crypto-related markets from Polymarket CLOB API, store in Redis."""
     try:
         async with httpx.AsyncClient(timeout=15) as client:
+            # Use the CLOB API which doesn't require auth
             resp = await client.get(
-                "https://gamma-api.polymarket.com/markets",
-                params={"tag": "crypto", "limit": 20, "active": True},
+                "https://clob.polymarket.com/markets",
+                headers={"Accept": "application/json"},
             )
             resp.raise_for_status()
             data = resp.json()
 
+        # Filter for crypto/BTC-related markets
+        btc_keywords = ["bitcoin", "btc", "crypto", "ethereum", "eth"]
         markets = []
-        for m in data if isinstance(data, list) else data.get("data", []):
-            markets.append(
-                {
+        raw_list = data if isinstance(data, list) else data.get("data", data.get("markets", []))
+        for m in raw_list:
+            question = (m.get("question", "") or "").lower()
+            if any(kw in question for kw in btc_keywords):
+                # Extract probability from tokens if available
+                tokens = m.get("tokens", [])
+                yes_price = None
+                if tokens and isinstance(tokens, list):
+                    for t in tokens:
+                        if t.get("outcome", "").lower() == "yes":
+                            yes_price = float(t.get("price", 0))
+                            break
+
+                markets.append({
                     "question": m.get("question", ""),
-                    "slug": m.get("slug", ""),
-                    "volume": m.get("volume", 0),
-                    "liquidity": m.get("liquidity", 0),
-                    "outcomes": m.get("outcomes", []),
-                    "outcome_prices": m.get("outcomePrices", []),
-                    "end_date": m.get("endDate", ""),
-                }
-            )
+                    "yes_price": yes_price,
+                    "volume": float(m.get("volume", 0) or 0),
+                    "liquidity": float(m.get("liquidity", 0) or 0),
+                    "active": m.get("active", True),
+                })
 
         r = await get_redis()
         await r.set("sentiment:polymarket", json.dumps(markets))
-        logger.info("Stored %d Polymarket markets", len(markets))
+        logger.info("Stored %d Polymarket crypto markets", len(markets))
 
     except Exception as e:
         logger.error("fetch_polymarket failed: %s", e)

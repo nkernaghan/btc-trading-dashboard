@@ -1,7 +1,9 @@
 """Macro data fetcher — DXY, SPX, NQ, US10Y, Gold via yfinance."""
 
+import asyncio
 import json
 import logging
+from functools import partial
 
 import yfinance as yf
 
@@ -23,10 +25,14 @@ async def fetch_macro():
     try:
         results = {}
 
+        loop = asyncio.get_running_loop()
+
         for name, symbol in TICKERS.items():
             try:
                 ticker = yf.Ticker(symbol)
-                hist = ticker.history(period="5d", interval="1h")
+                hist = await loop.run_in_executor(
+                    None, partial(ticker.history, period="5d", interval="1h")
+                )
 
                 if hist.empty:
                     logger.warning("No data returned for %s (%s)", name, symbol)

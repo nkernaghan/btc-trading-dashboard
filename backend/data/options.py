@@ -2,6 +2,7 @@
 
 import json
 import logging
+import time
 
 import httpx
 
@@ -26,10 +27,17 @@ async def fetch_options_data():
             book_resp.raise_for_status()
             book_data = book_resp.json().get("result", [])
 
-            # Fetch volatility index
+            # Fetch volatility index (requires start/end timestamps)
+            now_ms = int(time.time() * 1000)
+            one_day_ago_ms = now_ms - 86_400_000
             vol_resp = await client.get(
                 f"{DERIBIT_BASE}/get_volatility_index_data",
-                params={"currency": "BTC", "resolution": 3600},
+                params={
+                    "currency": "BTC",
+                    "resolution": 3600,
+                    "start_timestamp": one_day_ago_ms,
+                    "end_timestamp": now_ms,
+                },
             )
             vol_resp.raise_for_status()
             vol_data = vol_resp.json().get("result", {})
