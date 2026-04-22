@@ -51,15 +51,38 @@ async def fetch_binance_funding() -> None:
             logger.warning("fetch_binance_funding: unexpected response shape")
             return
 
-        # Latest entry is the last element in the list
+        # Latest entry is the last element in the list. A literal 0.0
+        # funding rate from Binance is a valid "neutral market" reading,
+        # but a missing fundingRate field is not — defaulting it to 0
+        # would silently look identical to a neutral reading. Skip the
+        # write when the field is missing or non-numeric.
         latest = data[-1]
-        rate = float(latest.get("fundingRate", 0) or 0)
+        raw_rate = latest.get("fundingRate")
+        if raw_rate is None:
+            logger.warning("Binance funding response missing 'fundingRate' — skip")
+            return
+        try:
+            rate = float(raw_rate)
+        except (TypeError, ValueError):
+            logger.warning("Binance funding non-numeric rate: %r", raw_rate)
+            return
+
         # fundingTime is in milliseconds — convert to seconds
         raw_ts = latest.get("fundingTime", 0)
         timestamp = int(raw_ts) // 1000 if raw_ts else int(time.time())
 
-        # Average over last 3 rates for smoothing
-        rates = [float(entry.get("fundingRate", 0) or 0) for entry in data]
+        # Average over last 3 rates for smoothing; only include entries
+        # whose fundingRate is present and parseable so a single bad
+        # record doesn't drag the smoothed value toward 0.
+        rates: list[float] = []
+        for entry in data:
+            r_raw = entry.get("fundingRate")
+            if r_raw is None:
+                continue
+            try:
+                rates.append(float(r_raw))
+            except (TypeError, ValueError):
+                continue
         avg_rate = round(sum(rates) / len(rates), 8) if rates else rate
 
         result = {
@@ -100,7 +123,23 @@ async def fetch_binance_oi() -> None:
             resp.raise_for_status()
             data: dict = resp.json()
 
-        oi = float(data.get("openInterest", 0) or 0)
+        # Distinguish "field missing" from "real zero". Zero OI is not
+        # a plausible reading for Binance BTCUSDT perp, so any zero /
+        # missing / malformed value is treated as a failed read and we
+        # skip the Redis write to preserve the previous valid value.
+        raw_oi = data.get("openInterest")
+        if raw_oi is None:
+            logger.warning("Binance OI response missing 'openInterest' — skip")
+            return
+        try:
+            oi = float(raw_oi)
+        except (TypeError, ValueError):
+            logger.warning("Binance OI response had non-numeric openInterest: %r", raw_oi)
+            return
+        if oi <= 0:
+            logger.warning("Binance OI returned non-positive value %.4f — skip", oi)
+            return
+
         raw_ts = data.get("time", 0)
         timestamp = int(raw_ts) // 1000 if raw_ts else int(time.time())
 

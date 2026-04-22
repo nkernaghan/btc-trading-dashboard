@@ -131,9 +131,23 @@ async def fetch_coinalyze_oi() -> None:
         if not data or not isinstance(data, list) or len(data) == 0:
             return
 
-        # Last entry is most recent
+        # Last entry is most recent. Distinguish "field missing" from
+        # "real zero" — a 0 OI on the Binance BTCUSDT perp is not
+        # plausible, so any missing/zero/malformed value is treated as
+        # a failed read and we skip the Redis write.
         latest = data[-1] if isinstance(data[-1], dict) else {}
-        oi_value = float(latest.get("o", 0) or 0)  # 'o' = open interest
+        raw_oi = latest.get("o")
+        if raw_oi is None:
+            logger.warning("Coinalyze OI response missing 'o' field — skip")
+            return
+        try:
+            oi_value = float(raw_oi)
+        except (TypeError, ValueError):
+            logger.warning("Coinalyze OI non-numeric 'o': %r", raw_oi)
+            return
+        if oi_value <= 0:
+            logger.warning("Coinalyze OI returned non-positive value %.2f — skip", oi_value)
+            return
 
         r = await get_redis()
 
@@ -176,8 +190,21 @@ async def fetch_coinalyze_funding() -> None:
         if not data or not isinstance(data, list) or len(data) == 0:
             return
 
+        # A funding rate of exactly 0.0 is a valid reading (truly
+        # neutral market), but a *missing* field is not — it would
+        # silently vote as "neutral" when the reality is unknown.
+        # Distinguish the two cases: skip the write only when the
+        # field is absent or non-numeric.
         entry = data[0] if isinstance(data[0], dict) else {}
-        rate = float(entry.get("value", 0) or 0)
+        raw_value = entry.get("value")
+        if raw_value is None:
+            logger.warning("Coinalyze funding response missing 'value' — skip")
+            return
+        try:
+            rate = float(raw_value)
+        except (TypeError, ValueError):
+            logger.warning("Coinalyze funding non-numeric 'value': %r", raw_value)
+            return
 
         result = {
             "funding_rate": rate,
@@ -214,11 +241,25 @@ async def fetch_coinalyze_long_short() -> None:
         if not data or not isinstance(data, list) or len(data) == 0:
             return
 
+        # 1.0 is the "neutral" L/S ratio — falling back to it on a
+        # missing field would silently look like real data showing a
+        # balanced market. Distinguish missing from present.
         latest = data[-1] if isinstance(data[-1], dict) else {}
-        ratio = float(latest.get("r", 1.0) or 1.0)  # 'r' = ratio
+        raw_ratio = latest.get("r")
+        if raw_ratio is None:
+            logger.warning("Coinalyze L/S response missing 'r' — skip")
+            return
+        try:
+            ratio = float(raw_ratio)
+        except (TypeError, ValueError):
+            logger.warning("Coinalyze L/S non-numeric 'r': %r", raw_ratio)
+            return
+        if ratio <= 0:
+            logger.warning("Coinalyze L/S returned non-positive ratio %.4f — skip", ratio)
+            return
 
         # Convert ratio to percentages
-        long_pct = round((ratio / (1 + ratio)) * 100, 2) if ratio > 0 else 50.0
+        long_pct = round((ratio / (1 + ratio)) * 100, 2)
         short_pct = round(100 - long_pct, 2)
 
         result = {
