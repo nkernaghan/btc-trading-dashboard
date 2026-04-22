@@ -6,10 +6,15 @@ from unittest.mock import AsyncMock, patch, MagicMock
 from scoring.outcome_tracker import check_signal_outcomes, get_signal_accuracy
 
 
-def _mock_signal_row(sig_id, direction, entry_low, entry_high, sl, tp1, tp2, leverage=20):
-    """Create a mock Row-like object."""
+def _mock_signal_row(
+    sig_id, direction, entry_low, entry_high, sl, tp1, tp2,
+    leverage=20, timestamp="1970-01-01T00:00:00+00:00",
+):
+    """Create a mock Row-like object. Timestamp defaults to epoch 0 so
+    the outcome tracker's signal-age filter admits all cached bars."""
     data = {
         "id": sig_id,
+        "timestamp": timestamp,
         "direction": direction,
         "entry_low": entry_low,
         "entry_high": entry_high,
@@ -121,6 +126,100 @@ async def test_no_resolution_when_price_between_sl_tp():
     # No UPDATE should have been called
     update_calls = [c for c in mock_db.execute.call_args_list if "UPDATE" in str(c)]
     assert len(update_calls) == 0
+
+
+@pytest.mark.asyncio
+async def test_long_sl_hit_via_1m_wick():
+    """SL should resolve when a recent 1m bar's LOW crossed SL even
+    though the current spot price has recovered back into range.
+
+    This is the core intra-bar fix: the pre-fix tracker checked only
+    current price and would have missed this SL hit entirely.
+    """
+    recent_bars = [
+        {"time": 100, "open": 67000, "high": 67100, "low": 66950,
+         "close": 67050, "volume": 1.0},
+        # This bar wicked DOWN through SL=66000 and recovered.
+        {"time": 160, "open": 67050, "high": 67150, "low": 65800,
+         "close": 67200, "volume": 2.5},
+        {"time": 220, "open": 67200, "high": 67400, "low": 67150,
+         "close": 67350, "volume": 1.2},
+    ]
+
+    async def mock_get(key):
+        if key == "btc:candles:1m:recent":
+            return json.dumps(recent_bars)
+        if key == "btc:price":
+            return json.dumps({"price": 67350})  # current price back in range
+        return None
+
+    mock_redis = AsyncMock()
+    mock_redis.get = mock_get
+
+    row = _mock_signal_row(
+        5, "LONG", 66900, 67100, 66000, 68500, 70000,
+        timestamp="1970-01-01T00:00:00+00:00",  # signal precedes all bars
+    )
+    mock_cursor = AsyncMock()
+    mock_cursor.fetchall = AsyncMock(return_value=[row])
+
+    mock_db = AsyncMock()
+    mock_db.execute = AsyncMock(return_value=mock_cursor)
+    mock_db.commit = AsyncMock()
+    mock_db.close = AsyncMock()
+
+    with patch("scoring.outcome_tracker.get_redis", return_value=mock_redis), \
+         patch("scoring.outcome_tracker.get_db", return_value=mock_db):
+        await check_signal_outcomes()
+
+    update_calls = [c for c in mock_db.execute.call_args_list if "UPDATE" in str(c)]
+    assert len(update_calls) == 1, "expected exactly one UPDATE"
+    args = update_calls[0][0][1]
+    assert args[0] == "SL", f"expected SL outcome, got {args[0]}"
+    # Exit at the SL level (not the wick bottom) — reflects a stop order fill
+    # PnL = (66000 - 67000) / 67000 * 100 * 20 = -29.85
+    assert args[1] < 0, "SL outcome should produce negative PnL"
+
+
+@pytest.mark.asyncio
+async def test_signal_newer_than_all_bars_is_not_resolved():
+    """A signal whose timestamp is AFTER every cached bar must not be
+    resolved — no bar postdates its creation, so there's no evidence
+    for any outcome yet."""
+    recent_bars = [
+        {"time": 100, "open": 67000, "high": 67100, "low": 65800,
+         "close": 67050, "volume": 1.0},
+    ]
+
+    async def mock_get(key):
+        if key == "btc:candles:1m:recent":
+            return json.dumps(recent_bars)
+        if key == "btc:price":
+            return json.dumps({"price": 67000})
+        return None
+
+    mock_redis = AsyncMock()
+    mock_redis.get = mock_get
+
+    # Signal timestamp is far in the future relative to bars at time=100
+    row = _mock_signal_row(
+        6, "LONG", 66900, 67100, 66000, 68500, 70000,
+        timestamp="2099-01-01T00:00:00+00:00",
+    )
+    mock_cursor = AsyncMock()
+    mock_cursor.fetchall = AsyncMock(return_value=[row])
+
+    mock_db = AsyncMock()
+    mock_db.execute = AsyncMock(return_value=mock_cursor)
+    mock_db.commit = AsyncMock()
+    mock_db.close = AsyncMock()
+
+    with patch("scoring.outcome_tracker.get_redis", return_value=mock_redis), \
+         patch("scoring.outcome_tracker.get_db", return_value=mock_db):
+        await check_signal_outcomes()
+
+    update_calls = [c for c in mock_db.execute.call_args_list if "UPDATE" in str(c)]
+    assert len(update_calls) == 0, "signal newer than all bars must not resolve"
 
 
 @pytest.mark.asyncio

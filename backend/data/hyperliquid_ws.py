@@ -66,10 +66,14 @@ def parse_l2_msg(msg: dict) -> dict:
 def parse_candle_msg(msg: dict) -> dict:
     """Parse candle from Hyperliquid WS message.
 
-    Returns {timestamp, open, high, low, close, volume}.
+    Returns {interval, time, open, high, low, close, volume}. The
+    ``interval`` field is needed because the dashboard subscribes to
+    multiple intervals on the same channel — without it we can't route
+    incoming candles to the correct Redis key.
     """
     d = msg.get("data", {})
     return {
+        "interval": str(d.get("i", "")),
         "time": int(d["t"]) // 1000,
         "open": float(d["o"]),
         "high": float(d["h"]),
@@ -90,7 +94,19 @@ async def run_hyperliquid_ws():
             "method": "subscribe",
             "subscription": {"type": "candle", "coin": "BTC", "interval": "1h"},
         },
+        # 1m candles power the outcome tracker's intra-bar SL/TP detection.
+        # Without them, spot-price-only checks silently miss wicks that
+        # crossed SL but recovered within the 1-minute tracker interval.
+        {
+            "method": "subscribe",
+            "subscription": {"type": "candle", "coin": "BTC", "interval": "1m"},
+        },
     ]
+
+    # Rolling window of recent 1m bars for outcome tracking; kept short
+    # because the tracker runs once per minute and only needs to cover
+    # its own inter-fire interval plus a small safety margin.
+    _1M_RECENT_LIMIT = 10
 
     while True:
         try:
@@ -127,12 +143,50 @@ async def run_hyperliquid_ws():
 
                         elif channel == "candle":
                             candle = parse_candle_msg(msg)
-                            await r.set(
-                                "btc:candle:1h", json.dumps(candle)
-                            )
-                            await r.publish(
-                                "btc:candle:stream", json.dumps(candle)
-                            )
+                            raw_interval = candle.pop("interval", "")
+                            if not raw_interval:
+                                # Defensive log — Hyperliquid's candle
+                                # payload should always include `i`. If
+                                # this fires, the protocol changed and
+                                # we'd otherwise silently misroute 1m
+                                # candles into the 1h key.
+                                logger.warning(
+                                    "Candle message missing interval field — "
+                                    "defaulting to 1h"
+                                )
+                            interval = raw_interval or "1h"
+
+                            if interval == "1m":
+                                # Maintain a rolling list of recent 1m bars.
+                                # The latest bar is updated in place while
+                                # still forming; a new bar-time appends and
+                                # trims the oldest.
+                                cached_raw = await r.get("btc:candles:1m:recent")
+                                try:
+                                    recent = json.loads(cached_raw) if cached_raw else []
+                                    if not isinstance(recent, list):
+                                        recent = []
+                                except (TypeError, ValueError):
+                                    recent = []
+
+                                if recent and recent[-1].get("time") == candle["time"]:
+                                    recent[-1] = candle
+                                else:
+                                    recent.append(candle)
+                                    if len(recent) > _1M_RECENT_LIMIT:
+                                        recent = recent[-_1M_RECENT_LIMIT:]
+                                await r.set(
+                                    "btc:candles:1m:recent", json.dumps(recent)
+                                )
+                                # No publish — frontend consumes 1h only.
+                            else:
+                                # 1h (and any other non-1m interval) path
+                                await r.set(
+                                    "btc:candle:1h", json.dumps(candle)
+                                )
+                                await r.publish(
+                                    "btc:candle:stream", json.dumps(candle)
+                                )
 
                     except Exception as e:
                         logger.error("Error processing WS message: %s", e)

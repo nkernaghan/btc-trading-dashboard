@@ -1,5 +1,11 @@
-"""Signal outcome tracker — checks open signals against current price to determine
-if TP1, TP2, or SL was hit. Updates the signals table with outcomes."""
+"""Signal outcome tracker — checks open signals against recent 1m bars to
+determine if TP1, TP2, or SL was hit. Updates the signals table with outcomes.
+
+Uses intra-bar high/low from a rolling window of 1-minute candles cached
+by the Hyperliquid WS (`btc:candles:1m:recent`). Checking only the spot
+price silently misses wicks that cross SL and recover — the previous
+implementation under-reported stop-outs and inflated the win rate.
+"""
 
 import json
 import logging
@@ -11,32 +17,93 @@ from redis_client import get_redis
 logger = logging.getLogger(__name__)
 
 
+def _parse_signal_epoch(ts_value) -> int:
+    """Best-effort ISO timestamp → epoch seconds. Returns 0 on failure,
+    which is interpreted upstream as "no time filter — consider all
+    cached bars"."""
+    if not ts_value:
+        return 0
+    try:
+        dt = datetime.fromisoformat(str(ts_value))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return int(dt.timestamp())
+    except (TypeError, ValueError):
+        return 0
+
+
+def _load_recent_1m_bars(raw: str | None) -> list[dict]:
+    """Parse cached 1m bars defensively. Returns [] on any malformed input."""
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+    except (TypeError, ValueError):
+        return []
+    if not isinstance(parsed, list):
+        return []
+    return [
+        b for b in parsed
+        if isinstance(b, dict) and "high" in b and "low" in b and "time" in b
+    ]
+
+
 async def check_signal_outcomes():
-    """Check all unresolved signals against current price.
+    """Check unresolved signals against recent 1m candle high/low.
 
     For each signal without an outcome:
-    - LONG: SL hit if price <= stop_loss, TP1 hit if price >= take_profit_1,
-            TP2 hit if price >= take_profit_2
-    - SHORT: SL hit if price >= stop_loss, TP1 hit if price <= take_profit_1,
-             TP2 hit if price <= take_profit_2
+    - LONG: SL hit if any bar's low <= stop_loss;
+            TP hit if any bar's high >= take_profit_N.
+    - SHORT: SL hit if any bar's high >= stop_loss;
+             TP hit if any bar's low <= take_profit_N.
 
-    Updates the signal row with outcome, actual_pnl_pct, and closed_at.
+    SL is checked first so a bar that wicks through both SL and TP1 is
+    recorded as SL — mirroring the backtester's conservative convention
+    (backtest/simulator.py).
+
+    Bars with `time` earlier than the signal's creation timestamp are
+    excluded so a freshly generated signal isn't retroactively closed on
+    a wick that occurred before it existed.
+
+    Falls back to spot price (`btc:price`) when the 1m cache is empty or
+    malformed — preserves the pre-fix behavior during WS warmup.
     """
     r = await get_redis()
-    price_raw = await r.get("btc:price")
-    if not price_raw:
-        return
 
-    price_data = json.loads(price_raw)
-    current_price = price_data.get("price", 0)
-    if current_price <= 0:
-        return
+    recent_raw = await r.get("btc:candles:1m:recent")
+    recent_bars = _load_recent_1m_bars(recent_raw)
+
+    # Spot-price fallback (also the exit-price reference for logging)
+    price_raw = await r.get("btc:price")
+    current_price = 0.0
+    if price_raw:
+        try:
+            current_price = float(json.loads(price_raw).get("price", 0) or 0)
+        except (TypeError, ValueError):
+            current_price = 0.0
+
+    if not recent_bars:
+        if current_price <= 0:
+            return
+        # Synthesize a single "bar" from spot to reuse the same check
+        # logic. Time=0 effectively disables the signal-age filter for
+        # this degenerate case.
+        recent_bars = [{
+            "time": 0,
+            "open": current_price, "high": current_price,
+            "low": current_price, "close": current_price,
+            "volume": 0.0,
+        }]
+    elif current_price <= 0:
+        # Use latest bar close as current-price proxy
+        current_price = float(recent_bars[-1].get("close", 0) or 0)
 
     db = await get_db()
     try:
         cursor = await db.execute(
-            """SELECT id, direction, entry_low, entry_high, stop_loss,
-                      take_profit_1, take_profit_2, recommended_leverage
+            """SELECT id, timestamp, direction, entry_low, entry_high,
+                      stop_loss, take_profit_1, take_profit_2,
+                      recommended_leverage
                FROM signals
                WHERE outcome IS NULL AND direction IN ('LONG', 'SHORT')
                ORDER BY timestamp DESC LIMIT 50"""
@@ -53,27 +120,40 @@ async def check_signal_outcomes():
             tp2 = row["take_profit_2"]
             leverage = row["recommended_leverage"] or 1
 
+            # Exclude bars older than the signal so pre-creation wicks
+            # don't retroactively close a fresh signal. _parse_signal_epoch
+            # returns 0 on malformed input, which admits all bars.
+            signal_ts = _parse_signal_epoch(row["timestamp"])
+            relevant = [b for b in recent_bars if b.get("time", 0) >= signal_ts]
+            if not relevant:
+                # Every cached bar predates the signal — nothing to check
+                # yet. Next tracker cycle will see a newer bar.
+                continue
+
+            bars_high = max(b["high"] for b in relevant)
+            bars_low = min(b["low"] for b in relevant)
+
             outcome = None
             exit_price = current_price
 
             if direction == "LONG":
-                if current_price <= sl:
+                if bars_low <= sl:
                     outcome = "SL"
                     exit_price = sl
-                elif current_price >= tp2:
+                elif bars_high >= tp2:
                     outcome = "TP2"
                     exit_price = tp2
-                elif current_price >= tp1:
+                elif bars_high >= tp1:
                     outcome = "TP1"
                     exit_price = tp1
             elif direction == "SHORT":
-                if current_price >= sl:
+                if bars_high >= sl:
                     outcome = "SL"
                     exit_price = sl
-                elif current_price <= tp2:
+                elif bars_low <= tp2:
                     outcome = "TP2"
                     exit_price = tp2
-                elif current_price <= tp1:
+                elif bars_low <= tp1:
                     outcome = "TP1"
                     exit_price = tp1
 
