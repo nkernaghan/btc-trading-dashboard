@@ -568,10 +568,13 @@ async def run_engine_cycle():
                     warnings.append(f"Price INSIDE CME gap ${g['low']:,.0f}-${g['high']:,.0f} — likely to complete fill")
 
     # ==================== COMPOSITE SCORING ====================
+    # structure is contributed as a TECHNICAL vote above (engine.py ~L484)
+    # and intentionally not passed to the composite gate — using it both
+    # as a vote and a gate double-counted the same underlying signal.
     result = compute_composite_signal(
         votes=votes, confluence_count=confluence_count,
         confluence_bonus=confluence_bonus, rsi=rsi_val,
-        ema_aligned=ema_aligned, structure=structure,
+        ema_aligned=ema_aligned,
     )
 
     # Geopolitical crisis gate — weakens score and caps leverage during extreme events

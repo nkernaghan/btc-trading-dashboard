@@ -6,7 +6,6 @@ def apply_technical_gate(
     composite_score: float,
     rsi: float,
     ema_aligned: bool,
-    structure: str,
 ) -> tuple[Direction, float]:
     """Apply technical filters that can block or weaken a signal.
 
@@ -14,7 +13,14 @@ def apply_technical_gate(
     - RSI > 80 blocks LONG -> WAIT, cap score at 49
     - RSI < 20 blocks SHORT -> WAIT, cap score at 49
     - No EMA alignment -> score *= 0.8
-    - Structure opposes signal -> WAIT, cap score at 49
+
+    Market structure was previously used here as a third gate but is
+    already voted on in the TECHNICAL category (see engine.py). Using
+    it both as a vote and as a gate double-counted the same underlying
+    signal — the vote would drag the composite score down *and* the
+    gate would then veto the result. Since structure on 1h timeframes
+    is noisy (2-bar swing detection), keeping it as a proportional
+    vote is preferable to giving it veto power.
 
     Returns adjusted (direction, score).
     """
@@ -36,13 +42,5 @@ def apply_technical_gate(
     # EMA misalignment weakens signal
     if not ema_aligned:
         adj_score *= 0.8
-
-    # Structure opposition blocks signal
-    if direction == Direction.LONG and structure == "bearish":
-        adj_direction = Direction.WAIT
-        adj_score = min(adj_score, 49.0)
-    elif direction == Direction.SHORT and structure == "bullish":
-        adj_direction = Direction.WAIT
-        adj_score = min(adj_score, 49.0)
 
     return adj_direction, adj_score

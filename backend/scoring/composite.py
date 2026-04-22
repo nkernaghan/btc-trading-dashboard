@@ -10,7 +10,6 @@ def compute_composite_signal(
     confluence_bonus: int,
     rsi: float,
     ema_aligned: bool,
-    structure: str,
 ) -> dict:
     """Compute final composite signal.
 
@@ -18,7 +17,7 @@ def compute_composite_signal(
     1. Get weighted score from vote aggregator
     2. Add confluence bonus (cap at 100)
     3. Determine raw direction (>=50 = LONG, <50 = SHORT; flip score for shorts)
-    4. Apply technical gate
+    4. Apply technical gate (RSI + EMA; structure is voted on, not gated)
     5. Classify strength: >=70 STRONG, >=50 WEAK, <50 NONE (-> WAIT)
 
     Returns dict with direction, score, strength, raw_score, confluence_count.
@@ -41,7 +40,7 @@ def compute_composite_signal(
 
     # Step 4: apply technical gate
     final_direction, final_score = apply_technical_gate(
-        direction, directional_score, rsi, ema_aligned, structure
+        direction, directional_score, rsi, ema_aligned
     )
 
     # Step 5: classify strength

@@ -69,7 +69,7 @@ def test_mixed_scores_neutral():
 
 
 def test_composite_signal_long():
-    """Mostly bullish + confluence 3 + rsi 55 + ema_aligned + bullish structure -> LONG, score > 70."""
+    """Mostly bullish + confluence 3 + rsi 55 + ema_aligned -> LONG, score > 70."""
     votes = [
         make_vote("OF1", IndicatorCategory.ORDER_FLOW, VoteType.BULL, strength=3),
         make_vote("OF2", IndicatorCategory.ORDER_FLOW, VoteType.BULL, strength=3),
@@ -86,7 +86,6 @@ def test_composite_signal_long():
         confluence_bonus=5,
         rsi=55.0,
         ema_aligned=True,
-        structure="bullish",
     )
     assert result["direction"] == Direction.LONG, f"Expected LONG, got {result['direction']}"
     assert result["score"] > 70, f"Expected score > 70, got {result['score']}"
@@ -111,7 +110,6 @@ def test_composite_signal_blocked_by_rsi():
         confluence_bonus=5,
         rsi=85.0,
         ema_aligned=True,
-        structure="bullish",
     )
     assert result["direction"] == Direction.WAIT, f"Expected WAIT, got {result['direction']}"
     assert result["score"] <= 49, f"Expected score <= 49, got {result['score']}"
