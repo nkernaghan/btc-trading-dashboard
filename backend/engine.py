@@ -146,30 +146,82 @@ async def run_engine_cycle():
             votes.append(vote("Max Pain Dist", IndicatorCategory.MACRO_DERIVATIVES, dist_to_max_pain,
                               {"bull": (-20, -2), "bear": (2, 20)}))
 
+    # ==================== DERIVATIVES — CROSS-VENUE AGGREGATES ====================
+    # BTC perp funding rates and OI changes are measured by every venue
+    # for the same underlying quantity; cross-exchange correlation is near
+    # 1.0. Voting on each venue separately inflates funding's and OI's
+    # weight inside MACRO_DERIVATIVES ~4x versus independent signals like
+    # put/call ratio or ETF flow. Collapse into one vote per metric by
+    # taking the simple mean of available components.
+    #
+    # Note: Coinalyze's funding endpoint currently queries BTCUSDT_PERP.A,
+    # which tracks Binance BTCUSDT perp, so including Coinalyze alongside
+    # Binance mildly over-weights Binance in the mean. Accepted: Binance
+    # is the highest-volume BTC perp venue anyway.
+    #
+    # The Hyperliquid-derived "long_short_ratio" is NOT used — it's a
+    # linear transform of the Hyperliquid funding rate, not a measured
+    # L/S ratio. The real measured L/S comes from Coinalyze below.
+
+    funding_components: list[tuple[str, float]] = []
     if coinglass_raw:
         cg = json.loads(coinglass_raw)
-        # Funding rate
-        if "funding_rates" in cg and isinstance(cg["funding_rates"], dict):
-            fr = safe_float(cg["funding_rates"].get("rate"), None)
-            if fr is not None:
-                votes.append(vote("Funding", IndicatorCategory.MACRO_DERIVATIVES, fr,
-                                  {"bull": (-0.1, -0.0001), "bear": (0.0005, 0.1)}))
-                if fr > 0.0008:
-                    warnings.append(f"Funding rate elevated: {fr*100:.4f}%")
+        fr = safe_float((cg.get("funding_rates") or {}).get("rate"), None)
+        if fr is not None:
+            funding_components.append(("hyperliquid", fr))
+    if okx_funding_raw:
+        rate = safe_float(json.loads(okx_funding_raw).get("avg_rate"), None)
+        if rate is not None:
+            funding_components.append(("okx", rate))
+    if binance_funding_raw:
+        rate = safe_float(json.loads(binance_funding_raw).get("rate"), None)
+        if rate is not None:
+            funding_components.append(("binance", rate))
+    if ca_funding_raw:
+        rate = safe_float(json.loads(ca_funding_raw).get("funding_rate"), None)
+        if rate is not None:
+            funding_components.append(("coinalyze", rate))
 
-        # Long/short ratio
-        if "long_short_ratio" in cg and isinstance(cg["long_short_ratio"], dict):
-            ls = safe_float(cg["long_short_ratio"].get("ratio"), None)
-            if ls is not None:
-                votes.append(vote("Long/Short", IndicatorCategory.MACRO_DERIVATIVES, ls,
-                                  {"bull": (1.2, 5.0), "bear": (0.2, 0.8)}))
+    if funding_components:
+        mean_funding = sum(r for _, r in funding_components) / len(funding_components)
+        fv = vote("Funding", IndicatorCategory.MACRO_DERIVATIVES, mean_funding,
+                  {"bull": (-0.1, -0.0001), "bear": (0.0005, 0.1)})
+        fv.description = (
+            f"Funding (mean of {len(funding_components)}): {mean_funding:.6f} "
+            f"[{', '.join(n for n, _ in funding_components)}]"
+        )
+        votes.append(fv)
+        if mean_funding > 0.0008:
+            warnings.append(f"Funding rate elevated: {mean_funding * 100:.4f}%")
 
-        # Open Interest
-        if "open_interest" in cg and isinstance(cg["open_interest"], dict):
-            oi_change = safe_float(cg["open_interest"].get("oi_change_24h"), None)
-            if oi_change is not None and oi_change != 0:
-                votes.append(vote("OI Change", IndicatorCategory.MACRO_DERIVATIVES, oi_change,
-                                  {"bull": (1, 50), "bear": (-50, -1)}))
+    oi_change_components: list[tuple[str, float]] = []
+    if coinglass_raw:
+        cg = json.loads(coinglass_raw)
+        chg = safe_float((cg.get("open_interest") or {}).get("oi_change_24h"), None)
+        if chg is not None:
+            oi_change_components.append(("hyperliquid", chg))
+    if okx_oi_raw:
+        chg = safe_float(json.loads(okx_oi_raw).get("oi_change_pct"), None)
+        if chg is not None:
+            oi_change_components.append(("okx", chg))
+    if binance_oi_raw:
+        chg = safe_float(json.loads(binance_oi_raw).get("oi_change_pct"), None)
+        if chg is not None:
+            oi_change_components.append(("binance", chg))
+    if ca_oi_raw:
+        chg = safe_float(json.loads(ca_oi_raw).get("oi_change_pct"), None)
+        if chg is not None:
+            oi_change_components.append(("coinalyze", chg))
+
+    if oi_change_components:
+        mean_oi_change = sum(c for _, c in oi_change_components) / len(oi_change_components)
+        ov = vote("OI Change", IndicatorCategory.MACRO_DERIVATIVES, mean_oi_change,
+                  {"bull": (1, 50), "bear": (-50, -1)})
+        ov.description = (
+            f"OI Change (mean of {len(oi_change_components)}): {mean_oi_change:.4g}% "
+            f"[{', '.join(n for n, _ in oi_change_components)}]"
+        )
+        votes.append(ov)
 
     # ==================== ON-CHAIN ====================
     if onchain_raw:
@@ -280,28 +332,10 @@ async def run_engine_cycle():
             if e.get("volume_ratio", 0) > 2.5:
                 warnings.append(f"{e['ticker']} volume {e['volume_ratio']:.1f}x avg ({e['price_change_pct']:+.1f}%)")
 
-    # ==================== OKX DERIVATIVES ====================
-    if okx_funding_raw:
-        okx_f = json.loads(okx_funding_raw)
-        okx_avg_rate = safe_float(okx_f.get("avg_rate"), None)
-        if okx_avg_rate is not None:
-            # Negative funding = shorts paying longs = contrarian bullish
-            # High positive funding = crowded longs = bearish
-            votes.append(vote("OKX Funding", IndicatorCategory.MACRO_DERIVATIVES, okx_avg_rate,
-                              {"bull": (-0.1, -0.0001), "bear": (0.0005, 0.1)}))
-            if okx_avg_rate > 0.001:
-                warnings.append(f"OKX funding rate elevated: {okx_avg_rate*100:.4f}%")
-
-    if okx_oi_raw:
-        okx_oi = json.loads(okx_oi_raw)
-        okx_oi_change = safe_float(okx_oi.get("oi_change_pct"), None)
-        if okx_oi_change is not None and okx_oi_change != 0:
-            # Rising OI with price = trend confirmation (directional from context)
-            # Falling OI = positions closing = less conviction
-            votes.append(vote("OKX OI Change", IndicatorCategory.MACRO_DERIVATIVES, okx_oi_change,
-                              {"bull": (2, 50), "bear": (-50, -2)}))
-
     # ==================== COINALYZE AGGREGATED DERIVATIVES ====================
+    # OKX + Binance funding/OI now feed the cross-venue mean above.
+    # Liquidations and measured Long/Short ratio are independent signals
+    # and remain.
     if ca_liq_raw:
         ca_liq = json.loads(ca_liq_raw)
         net_liq = safe_float(ca_liq.get("net_liquidations_usd"), None)
@@ -316,20 +350,6 @@ async def run_engine_cycle():
             if total_liq > 50_000_000:  # $50M+ liquidations
                 warnings.append(f"Heavy liquidations: ${total_liq/1e6:.0f}M ({ca_liq.get('dominant_side', '?')} dominant)")
 
-    if ca_oi_raw:
-        ca_oi = json.loads(ca_oi_raw)
-        ca_oi_change = safe_float(ca_oi.get("oi_change_pct"), None)
-        if ca_oi_change is not None and ca_oi_change != 0:
-            votes.append(vote("Agg OI Change", IndicatorCategory.MACRO_DERIVATIVES, ca_oi_change,
-                              {"bull": (2, 50), "bear": (-50, -2)}))
-
-    if ca_funding_raw:
-        ca_fund = json.loads(ca_funding_raw)
-        ca_rate = safe_float(ca_fund.get("funding_rate"), None)
-        if ca_rate is not None:
-            votes.append(vote("Agg Funding", IndicatorCategory.MACRO_DERIVATIVES, ca_rate,
-                              {"bull": (-0.1, -0.0001), "bear": (0.0005, 0.1)}))
-
     if ca_ls_raw:
         ca_ls = json.loads(ca_ls_raw)
         ls_ratio = safe_float(ca_ls.get("ratio"), None)
@@ -338,26 +358,7 @@ async def run_engine_cycle():
             votes.append(vote("Agg L/S Ratio", IndicatorCategory.MACRO_DERIVATIVES, ls_ratio,
                               {"bull": (0.2, 0.7), "bear": (1.5, 5.0)}))
 
-    # ==================== BINANCE DERIVATIVES ====================
-    if binance_funding_raw:
-        bn_f = json.loads(binance_funding_raw)
-        bn_rate = safe_float(bn_f.get("rate"), None)
-        if bn_rate is not None:
-            # Negative funding = shorts paying longs = contrarian bullish signal
-            # High positive funding = overcrowded longs = bearish signal
-            votes.append(vote("Binance Funding", IndicatorCategory.MACRO_DERIVATIVES, bn_rate,
-                              {"bull": (-0.1, -0.0001), "bear": (0.0005, 0.1)}))
-            if bn_rate > 0.001:
-                warnings.append(f"Binance funding rate elevated: {bn_rate * 100:.4f}%")
-
-    if binance_oi_raw:
-        bn_oi = json.loads(binance_oi_raw)
-        bn_oi_change = safe_float(bn_oi.get("oi_change_pct"), None)
-        if bn_oi_change is not None:
-            # Rising OI = new positions opening = trend confirmation
-            # Falling OI = positions unwinding = weakening momentum
-            votes.append(vote("Binance OI Change", IndicatorCategory.MACRO_DERIVATIVES, bn_oi_change,
-                              {"bull": (2, 50), "bear": (-50, -2)}))
+    # Binance funding/OI folded into the cross-venue mean above.
 
     # ==================== STABLECOIN FLOWS (DeFiLlama) ====================
     if stablecoin_flows_raw:

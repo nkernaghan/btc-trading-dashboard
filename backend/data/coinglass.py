@@ -10,20 +10,17 @@ The response is a two-element list:
 
 BTC is matched by asset name == "BTC".
 
-Long/short ratio is approximated from the funding rate:
-  - Positive funding  → longs pay shorts → long-heavy market → ratio > 1
-  - Negative funding  → shorts pay longs → short-heavy market → ratio < 1
-  - Magnitude capped to a ±5× multiplier so extreme rates don't produce
-    nonsensical ratio values.
-
-Redis key ``coinglass:data`` structure (unchanged from original):
+Redis key ``coinglass:data`` structure:
   funding_rates:    {"rate": float}          — 8-h funding rate as a decimal
-  long_short_ratio: {"ratio": float,
-                     "long_rate": float,
-                     "short_rate": float}
   open_interest:    {"total_oi": float,      — OI in USD
                      "oi_change_24h": float} — % change (null — not provided)
   liquidations:     null                     — not available from free source
+
+Note: a long/short ratio synthesised from the funding rate was removed
+because it is mathematically the same signal as the funding rate itself
+(just with a linear transform and a rename), which caused the engine to
+double-count funding. The real measured long/short ratio comes from
+Coinalyze; see data/coinalyze.py.
 """
 
 import json
@@ -37,30 +34,6 @@ logger = logging.getLogger(__name__)
 
 HYPERLIQUID_INFO = "https://api.hyperliquid.xyz/info"
 _BTC_ASSET_NAME = "BTC"
-
-
-def _ls_ratio_from_funding(funding_rate: float) -> dict:
-    """Approximate long/short ratio and split from a funding rate.
-
-    Args:
-        funding_rate: 8-h funding rate as a decimal (e.g. 0.0001).
-
-    Returns:
-        Dict with keys ``ratio``, ``long_rate``, ``short_rate``.
-    """
-    # Scale: 0.0001 funding ≈ neutral (1.0 ratio). Each 0.0001 shifts by 0.5.
-    # Clamp multiplier to [-5, +5] range to avoid absurd outputs.
-    multiplier = funding_rate / 0.0001
-    multiplier = max(-5.0, min(5.0, multiplier))
-
-    ratio = round(1.0 + multiplier * 0.1, 4)
-    ratio = max(0.1, ratio)  # can't be negative or zero
-
-    # Derive rough split percentages
-    long_rate = round(ratio / (1.0 + ratio), 4)
-    short_rate = round(1.0 - long_rate, 4)
-
-    return {"ratio": ratio, "long_rate": long_rate, "short_rate": short_rate}
 
 
 async def _fetch_hyperliquid_btc(client: httpx.AsyncClient) -> dict | None:
@@ -102,9 +75,8 @@ async def _fetch_hyperliquid_btc(client: httpx.AsyncClient) -> dict | None:
 async def fetch_coinglass() -> None:
     """Fetch derivatives metrics from Hyperliquid and store in Redis.
 
-    Writes ``coinglass:data`` with the same structure the engine expects:
+    Writes ``coinglass:data`` with:
     - funding_rates.rate
-    - long_short_ratio.ratio / long_rate / short_rate
     - open_interest.total_oi / oi_change_24h
     - liquidations (null — not available without a paid source)
     """
@@ -126,12 +98,7 @@ async def fetch_coinglass() -> None:
 
             if funding_rate is not None:
                 result["funding_rates"] = {"rate": funding_rate}
-                result["long_short_ratio"] = _ls_ratio_from_funding(funding_rate)
-                logger.info(
-                    "Hyperliquid BTC funding=%.6f, approx L/S ratio=%.4f",
-                    funding_rate,
-                    result["long_short_ratio"]["ratio"],
-                )
+                logger.info("Hyperliquid BTC funding=%.6f", funding_rate)
 
             # --- Open Interest ---
             raw_oi = btc_ctx.get("openInterest")
