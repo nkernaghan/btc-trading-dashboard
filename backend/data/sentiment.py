@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 
 import httpx
 
@@ -66,6 +67,75 @@ async def fetch_btc_dominance():
         logger.error("fetch_btc_dominance failed: %s", e)
 
 
+# Polymarket question framing — used to decide whether a high `yes_price`
+# indicates a bullish or bearish outcome for BTC. A YES on "will BTC hit
+# $120k" is bullish; a YES on "will BTC crash below $50k" is bearish.
+#
+# Direction keywords (above/below/under/over) are stronger than action
+# keywords (break/hit/reach) because the direction word fully disambiguates
+# framing even when the action word is neutral.
+#
+# All matching is word-boundary regex, not substring. Substring matching
+# silently mis-classifies common cases: "over" inside "recover"/"discover"/
+# "overturn", "ath" inside "death"/"cathedral"/"weather", "ban" inside
+# "abandon". Because directional keywords outrank action keywords, a false
+# directional hit flips the polarity — the exact failure this classifier
+# is meant to prevent.
+_POLY_DIRECTIONAL_BULL = ("above", "over", "exceed", "surpass", "higher")
+_POLY_DIRECTIONAL_BEAR = ("below", "under", "lower")
+_POLY_ACTION_BULL = (
+    "reach", "hit", "break", "cross", "surge", "rally",
+    "approve", "adoption", "new high", "all-time high", "ath",
+    "new ath", "record high",
+)
+_POLY_ACTION_BEAR = (
+    "crash", "fall", "drop", "plunge", "capitulate", "collapse",
+    "tank", "dump", "lawsuit", "ban", "hack", "rug", "sec enforcement",
+)
+
+
+def _compile_wb(keywords: tuple[str, ...]) -> re.Pattern:
+    """Compile keywords into a single case-insensitive word-boundary regex."""
+    escaped = [re.escape(kw) for kw in keywords]
+    return re.compile(r"\b(?:" + "|".join(escaped) + r")\b", re.IGNORECASE)
+
+
+_POLY_DIR_BULL_RE = _compile_wb(_POLY_DIRECTIONAL_BULL)
+_POLY_DIR_BEAR_RE = _compile_wb(_POLY_DIRECTIONAL_BEAR)
+_POLY_ACT_BULL_RE = _compile_wb(_POLY_ACTION_BULL)
+_POLY_ACT_BEAR_RE = _compile_wb(_POLY_ACTION_BEAR)
+
+
+def _classify_polarity(question: str) -> str:
+    """Classify a Polymarket question as bull / bear / unknown framing.
+
+    A "bull" classification means a high ``yes_price`` is bullish for BTC;
+    a "bear" classification means a high ``yes_price`` is bearish. Unknown
+    questions should be skipped by consumers rather than defaulted either
+    way, since defaulting silently flips the sign of the signal.
+
+    Directional keywords (above/below) win over action keywords (break/hit)
+    because the direction word alone is sufficient to determine framing.
+    """
+    if not question:
+        return "unknown"
+
+    dir_bull = bool(_POLY_DIR_BULL_RE.search(question))
+    dir_bear = bool(_POLY_DIR_BEAR_RE.search(question))
+    if dir_bull and not dir_bear:
+        return "bull"
+    if dir_bear and not dir_bull:
+        return "bear"
+
+    act_bull = len(_POLY_ACT_BULL_RE.findall(question))
+    act_bear = len(_POLY_ACT_BEAR_RE.findall(question))
+    if act_bull > act_bear:
+        return "bull"
+    if act_bear > act_bull:
+        return "bear"
+    return "unknown"
+
+
 async def fetch_polymarket():
     """Fetch crypto-related markets from Polymarket CLOB API, store in Redis."""
     try:
@@ -83,7 +153,8 @@ async def fetch_polymarket():
         markets = []
         raw_list = data if isinstance(data, list) else data.get("data", data.get("markets", []))
         for m in raw_list:
-            question = (m.get("question", "") or "").lower()
+            question_raw = m.get("question", "") or ""
+            question = question_raw.lower()
             if any(kw in question for kw in btc_keywords):
                 # Extract probability from tokens if available
                 tokens = m.get("tokens", [])
@@ -95,8 +166,9 @@ async def fetch_polymarket():
                             break
 
                 markets.append({
-                    "question": m.get("question", ""),
+                    "question": question_raw,
                     "yes_price": yes_price,
+                    "polarity": _classify_polarity(question_raw),
                     "volume": float(m.get("volume", 0) or 0),
                     "liquidity": float(m.get("liquidity", 0) or 0),
                     "active": m.get("active", True),
@@ -104,7 +176,16 @@ async def fetch_polymarket():
 
         r = await get_redis()
         await r.set("sentiment:polymarket", json.dumps(markets))
-        logger.info("Stored %d Polymarket crypto markets", len(markets))
+        polarity_counts = {
+            "bull": sum(1 for m in markets if m["polarity"] == "bull"),
+            "bear": sum(1 for m in markets if m["polarity"] == "bear"),
+            "unknown": sum(1 for m in markets if m["polarity"] == "unknown"),
+        }
+        logger.info(
+            "Stored %d Polymarket crypto markets (bull=%d, bear=%d, unknown=%d)",
+            len(markets), polarity_counts["bull"],
+            polarity_counts["bear"], polarity_counts["unknown"],
+        )
 
     except Exception as e:
         logger.error("fetch_polymarket failed: %s", e)

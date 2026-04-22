@@ -242,11 +242,23 @@ async def run_engine_cycle():
     if polymarket_raw:
         pm = json.loads(polymarket_raw)
         if isinstance(pm, list) and len(pm) > 0:
-            # Average the "yes" probability across BTC-related prediction markets
-            # High avg yes_price on bullish questions = market expects upside
-            prices = [m["yes_price"] for m in pm if m.get("yes_price") is not None]
-            if prices:
-                avg_prob = sum(prices) / len(prices)
+            # Normalize each yes_price by question polarity so the aggregate
+            # represents P(bullish outcome for BTC). For bear-framed questions
+            # ("will BTC crash...") a high yes_price is bearish, so we use
+            # (1 - yes_price). Unknown framing is skipped to avoid summing
+            # signals of indeterminate sign.
+            normalized = []
+            for m in pm:
+                yp = m.get("yes_price")
+                polarity = m.get("polarity", "unknown")
+                if yp is None or polarity == "unknown":
+                    continue
+                if polarity == "bull":
+                    normalized.append(yp)
+                elif polarity == "bear":
+                    normalized.append(1.0 - yp)
+            if normalized:
+                avg_prob = sum(normalized) / len(normalized)
                 votes.append(vote("Polymarket", IndicatorCategory.SENTIMENT, avg_prob,
                                   {"bull": (0.6, 1.0), "bear": (0.0, 0.4)}))
 
