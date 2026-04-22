@@ -67,6 +67,24 @@ async def fetch_okx_funding() -> None:
         logger.error("fetch_okx_funding failed: %s", exc)
 
 
+async def _current_btc_price() -> float | None:
+    """Read the latest BTC spot price from the Hyperliquid WS cache in Redis.
+
+    Returns a positive float or None if the price is absent/zero/malformed.
+    Used to convert coin-margined OI (BTC units) into USD without mixing
+    units in the aggregated total.
+    """
+    try:
+        r = await get_redis()
+        raw = await r.get("btc:price")
+        if not raw:
+            return None
+        price = float(json.loads(raw).get("price", 0))
+        return price if price > 0 else None
+    except Exception:
+        return None
+
+
 async def fetch_okx_open_interest() -> None:
     """Fetch BTC perpetual open interest from OKX and store in Redis.
 
@@ -75,10 +93,21 @@ async def fetch_okx_open_interest() -> None:
     the previously stored value.
 
     Redis key ``okx:open_interest`` structure:
-      total_oi_usd   float  — combined OI in USD across both contract types
-      oi_change_pct  float  — % change vs previous reading (0.0 if no prior)
-      usdt_oi_usd    float  — USDT-margined OI in USD
-      usd_oi_usd     float  — coin-margined OI in USD
+      total_oi_usd     float       — combined OI in USD (only legs that
+                                     could be resolved to USD are summed)
+      oi_change_pct    float       — % change vs previous reading
+      usdt_oi_usd      float|None  — USDT-margined OI in USD, or None
+      usd_oi_usd       float|None  — coin-margined OI in USD, or None
+      legs_included    list[str]   — which legs contributed to total_oi_usd
+                                     ("usdt", "coin-margined")
+
+    When coin-margined OI returns ``oi`` (BTC units) instead of ``oiUsd``,
+    the BTC value is converted to USD using the live BTC price from the
+    Hyperliquid WS cache. If that price is also unavailable, the leg is
+    dropped rather than silently summed with the USDT leg (which would
+    mix BTC units into a nominally-USD total). If every leg is unusable,
+    the Redis write is skipped so the previous value is preserved rather
+    than overwritten with a zeroed-out total.
     """
     try:
         async with httpx.AsyncClient(timeout=20) as client:
@@ -91,42 +120,71 @@ async def fetch_okx_open_interest() -> None:
         # OKX OI for coin-margined SWAP may use "oi" in BTC; prefer oiUsd when present
         usd_oi_usd = _extract_float(resp_usd, "data", 0, "oiUsd")
 
-        # Fallback: some OKX responses use "oi" (BTC units) for coin-margined
+        # Fallback for coin-margined SWAP: "oi" is in BTC units. Convert
+        # to USD via the live BTC price. Never assign BTC units directly
+        # to usd_oi_usd — that mixes units in the aggregated total.
         if usd_oi_usd is None:
             oi_btc = _extract_float(resp_usd, "data", 0, "oi")
-            # Approximate USD conversion using USDT OI ratio if both BTC values exist
-            # Without a live BTC price this is a best-effort estimate; the field is
-            # marked as usd_oi_usd so callers should treat it as approximate.
             if oi_btc is not None:
-                usd_oi_usd = oi_btc  # will be 0 or near 0 — flag for downstream
+                btc_price = await _current_btc_price()
+                if btc_price is not None:
+                    usd_oi_usd = oi_btc * btc_price
+                else:
+                    logger.warning(
+                        "OKX coin-margined OI in BTC (%.4f) but BTC price "
+                        "unavailable — dropping this leg rather than mixing units",
+                        oi_btc,
+                    )
 
-        total_oi_usd: float = (usdt_oi_usd or 0.0) + (usd_oi_usd or 0.0)
+        # Sum only legs that are definitively in USD
+        legs: list[tuple[str, float]] = []
+        if usdt_oi_usd is not None:
+            legs.append(("usdt", usdt_oi_usd))
+        if usd_oi_usd is not None:
+            legs.append(("coin-margined", usd_oi_usd))
 
-        # Compute change vs previous stored value
-        oi_change_pct = 0.0
+        if not legs:
+            logger.warning(
+                "OKX OI: no usable legs — skipping write to preserve previous value"
+            )
+            return
+
+        total_oi_usd = sum(value for _, value in legs)
+        legs_included = [name for name, _ in legs]
+
+        # Compute change vs previous stored value. Only meaningful when the
+        # same legs are present; if the leg set changed, a leg appearing or
+        # disappearing between runs would produce a spurious spike, so in
+        # that case the change is reported as None instead of a made-up 0.
+        oi_change_pct: float | None = None
         r = await get_redis()
         prev_raw = await r.get("okx:open_interest")
         if prev_raw:
             try:
                 prev = json.loads(prev_raw)
                 prev_total = float(prev.get("total_oi_usd") or 0)
-                if prev_total > 0:
-                    oi_change_pct = round(((total_oi_usd - prev_total) / prev_total) * 100, 4)
+                prev_legs = prev.get("legs_included") or []
+                if prev_total > 0 and list(prev_legs) == legs_included:
+                    oi_change_pct = round(
+                        ((total_oi_usd - prev_total) / prev_total) * 100, 4
+                    )
             except (ValueError, TypeError, json.JSONDecodeError):
                 pass
 
         result = {
             "total_oi_usd": round(total_oi_usd, 2),
             "oi_change_pct": oi_change_pct,
-            "usdt_oi_usd": round(usdt_oi_usd or 0.0, 2),
-            "usd_oi_usd": round(usd_oi_usd or 0.0, 2),
+            "usdt_oi_usd": round(usdt_oi_usd, 2) if usdt_oi_usd is not None else None,
+            "usd_oi_usd": round(usd_oi_usd, 2) if usd_oi_usd is not None else None,
+            "legs_included": legs_included,
         }
 
         await r.set("okx:open_interest", json.dumps(result))
         logger.info(
-            "Stored OKX OI: total=%.2f USD, change=%.4f%%",
+            "Stored OKX OI: total=%.2f USD, change=%s%%, legs=%s",
             total_oi_usd,
-            oi_change_pct,
+            f"{oi_change_pct:.4f}" if oi_change_pct is not None else "N/A",
+            legs_included,
         )
 
     except Exception as exc:
