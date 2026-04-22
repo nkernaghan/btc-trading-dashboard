@@ -4,7 +4,7 @@ import json
 import logging
 from datetime import datetime, timezone
 
-from redis_client import get_redis
+from redis_client import get_redis, get_fresh
 from db import get_db
 from models.schemas import IndicatorVote
 from models.enums import Direction, IndicatorCategory, VoteType
@@ -50,34 +50,41 @@ def safe_float(val, default=None):
 async def run_engine_cycle():
     r = await get_redis()
 
+    # WS-driven keys (no staleness policy — updated every tick)
     candle_raw = await r.get("btc:candle:1h")
     orderbook_raw = await r.get("btc:orderbook")
-    macro_raw = await r.get("macro:data")
-    onchain_raw = await r.get("onchain:data")
-    fg_raw = await r.get("sentiment:fear_greed")
-    dominance_raw = await r.get("sentiment:btc_dominance")
-    polymarket_raw = await r.get("sentiment:polymarket")
-    options_raw = await r.get("options:data")
-    coinglass_raw = await r.get("coinglass:data")
-    stablecoin_raw = await r.get("onchain:stablecoin")
-    news_raw = await r.get("news:articles")
-    etf_raw = await r.get("etf:flows")
-    okx_funding_raw = await r.get("okx:funding")
-    okx_oi_raw = await r.get("okx:open_interest")
-    binance_funding_raw = await r.get("binance:funding")
-    binance_oi_raw = await r.get("binance:open_interest")
-    ca_liq_raw = await r.get("coinalyze:liquidations")
-    ca_oi_raw = await r.get("coinalyze:oi")
-    ca_funding_raw = await r.get("coinalyze:funding")
-    ca_ls_raw = await r.get("coinalyze:long_short")
-    stablecoin_flows_raw = await r.get("defi:stablecoin_flows")
-    defi_tvl_raw = await r.get("defi:tvl")
-    hashrate_raw = await r.get("mining:hashrate")
-    whale_txs_raw = await r.get("onchain:whale_txs")
-    tx_volume_raw = await r.get("onchain:tx_volume")
-    geo_tone_raw = await r.get("geopolitical:tone")
-    geo_conflict_raw = await r.get("geopolitical:conflict")
-    geo_events_raw = await r.get("geopolitical:events")
+
+    # Scheduler-driven keys — read through get_fresh so the engine
+    # drops any source whose last fetch exceeded ~3x its scheduled
+    # interval. A stale source returns None and the corresponding
+    # `if x_raw:` guard below naturally skips the vote. See
+    # _MAX_AGE_SECONDS in redis_client.py for per-key policy.
+    macro_raw = await get_fresh(r, "macro:data")
+    onchain_raw = await get_fresh(r, "onchain:data")
+    fg_raw = await get_fresh(r, "sentiment:fear_greed")
+    dominance_raw = await get_fresh(r, "sentiment:btc_dominance")
+    polymarket_raw = await get_fresh(r, "sentiment:polymarket")
+    options_raw = await get_fresh(r, "options:data")
+    coinglass_raw = await get_fresh(r, "coinglass:data")
+    stablecoin_raw = await get_fresh(r, "onchain:stablecoin")
+    news_raw = await get_fresh(r, "news:articles")
+    etf_raw = await get_fresh(r, "etf:flows")
+    okx_funding_raw = await get_fresh(r, "okx:funding")
+    okx_oi_raw = await get_fresh(r, "okx:open_interest")
+    binance_funding_raw = await get_fresh(r, "binance:funding")
+    binance_oi_raw = await get_fresh(r, "binance:open_interest")
+    ca_liq_raw = await get_fresh(r, "coinalyze:liquidations")
+    ca_oi_raw = await get_fresh(r, "coinalyze:oi")
+    ca_funding_raw = await get_fresh(r, "coinalyze:funding")
+    ca_ls_raw = await get_fresh(r, "coinalyze:long_short")
+    stablecoin_flows_raw = await get_fresh(r, "defi:stablecoin_flows")
+    defi_tvl_raw = await get_fresh(r, "defi:tvl")
+    hashrate_raw = await get_fresh(r, "mining:hashrate")
+    whale_txs_raw = await get_fresh(r, "onchain:whale_txs")
+    tx_volume_raw = await get_fresh(r, "onchain:tx_volume")
+    geo_tone_raw = await get_fresh(r, "geopolitical:tone")
+    geo_conflict_raw = await get_fresh(r, "geopolitical:conflict")
+    geo_events_raw = await get_fresh(r, "geopolitical:events")
 
     if not candle_raw:
         return

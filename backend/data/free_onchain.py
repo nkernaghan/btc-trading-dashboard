@@ -20,7 +20,7 @@ import logging
 
 import httpx
 
-from redis_client import get_redis
+from redis_client import get_redis, set_with_ts
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +84,7 @@ async def fetch_stablecoin_flows() -> None:
         }
 
         r = await get_redis()
-        await r.set("defi:stablecoin_flows", json.dumps(result))
+        await set_with_ts(r, "defi:stablecoin_flows", json.dumps(result))
         logger.info(
             "Stored stablecoin flows: USDT=%.2fB, USDC=%.2fB, total_1d=%.4f%%",
             (usdt_circ or 0) / 1e9,
@@ -134,7 +134,7 @@ async def fetch_defi_tvl() -> None:
         }
 
         r = await get_redis()
-        await r.set("defi:tvl", json.dumps(result))
+        await set_with_ts(r, "defi:tvl", json.dumps(result))
         logger.info(
             "Stored DeFi TVL: %.2fB USD, 1d=%.4f%%, 7d=%.4f%%",
             current_tvl / 1e9,
@@ -210,7 +210,7 @@ async def fetch_hashrate_difficulty() -> None:
         }
 
         r = await get_redis()
-        await r.set("mining:hashrate", json.dumps(result))
+        await set_with_ts(r, "mining:hashrate", json.dumps(result))
         logger.info(
             "Stored mining data: hashrate=%.3eH/s, 7d=%.4f%%, diff_change=%.4f%%",
             current_hashrate or 0,
@@ -272,7 +272,7 @@ async def fetch_whale_transactions() -> None:
         }
 
         r = await get_redis()
-        await r.set("onchain:whale_txs", json.dumps(result))
+        await set_with_ts(r, "onchain:whale_txs", json.dumps(result))
         logger.info(
             "Stored whale txs: count=%d, total=%.2f BTC, largest=%.2f BTC",
             whale_tx_count,
@@ -319,7 +319,7 @@ async def fetch_btc_tx_volume() -> None:
         }
 
         r = await get_redis()
-        await r.set("onchain:tx_volume", json.dumps(result))
+        await set_with_ts(r, "onchain:tx_volume", json.dumps(result))
         logger.info(
             "Stored BTC tx volume: %.2fM USD, 1d=%.4f%%",
             (current_volume or 0) / 1e6,

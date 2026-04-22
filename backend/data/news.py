@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 import httpx
 
 from config import settings
-from redis_client import get_redis
+from redis_client import get_redis, set_with_ts
 
 
 def _cg_headers() -> dict:
@@ -119,7 +119,7 @@ async def fetch_news_api():
                 unique_articles.append(a)
 
         r = await get_redis()
-        await r.set("news:articles", json.dumps(unique_articles))
+        await set_with_ts(r, "news:articles", json.dumps(unique_articles))
         logger.info("Stored %d BTC news articles", len(unique_articles))
 
     except Exception as e:
@@ -164,7 +164,7 @@ async def fetch_etf_flows():
                 logger.warning("ETF proxy fetch failed: %s", e)
 
         r = await get_redis()
-        await r.set("etf:flows", json.dumps(result))
+        await set_with_ts(r, "etf:flows", json.dumps(result))
         logger.info("Stored ETF flow data")
 
     except Exception as e:

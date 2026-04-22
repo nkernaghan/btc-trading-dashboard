@@ -7,7 +7,7 @@ import re
 import httpx
 
 from config import settings
-from redis_client import get_redis
+from redis_client import get_redis, set_with_ts
 
 
 def _cg_headers() -> dict:
@@ -35,7 +35,7 @@ async def fetch_fear_greed():
         }
 
         r = await get_redis()
-        await r.set("sentiment:fear_greed", json.dumps(result))
+        await set_with_ts(r, "sentiment:fear_greed", json.dumps(result))
         logger.info("Stored Fear & Greed: %s (%s)", result["value"], result["classification"])
 
     except Exception as e:
@@ -60,7 +60,7 @@ async def fetch_btc_dominance():
         }
 
         r = await get_redis()
-        await r.set("sentiment:btc_dominance", json.dumps(result))
+        await set_with_ts(r, "sentiment:btc_dominance", json.dumps(result))
         logger.info("Stored BTC dominance: %.2f%%", btc_dom)
 
     except Exception as e:
@@ -175,7 +175,7 @@ async def fetch_polymarket():
                 })
 
         r = await get_redis()
-        await r.set("sentiment:polymarket", json.dumps(markets))
+        await set_with_ts(r, "sentiment:polymarket", json.dumps(markets))
         polarity_counts = {
             "bull": sum(1 for m in markets if m["polarity"] == "bull"),
             "bear": sum(1 for m in markets if m["polarity"] == "bear"),

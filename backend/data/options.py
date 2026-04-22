@@ -6,7 +6,7 @@ import time
 
 import httpx
 
-from redis_client import get_redis
+from redis_client import get_redis, set_with_ts
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +95,7 @@ async def fetch_options_data():
         }
 
         r = await get_redis()
-        await r.set("options:data", json.dumps(result))
+        await set_with_ts(r, "options:data", json.dumps(result))
         logger.info(
             "Stored options data: P/C=%.4f, max_pain=%s, IV=%.2f",
             put_call_ratio,

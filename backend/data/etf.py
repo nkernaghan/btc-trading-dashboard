@@ -13,7 +13,7 @@ import logging
 
 import httpx
 
-from redis_client import get_redis
+from redis_client import get_redis, set_with_ts
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +125,7 @@ async def fetch_etf_flows():
         }
 
         r = await get_redis()
-        await r.set("etf:flows", json.dumps(result))
+        await set_with_ts(r, "etf:flows", json.dumps(result))
         logger.info(
             "ETF flow proxy: score=%.4f, vol_ratio=%.2fx (%d ETFs)",
             flow_score, avg_vol_ratio, len(etf_data),

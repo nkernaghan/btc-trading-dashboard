@@ -23,7 +23,7 @@ import time
 import httpx
 
 from config import settings
-from redis_client import get_redis
+from redis_client import get_redis, set_with_ts
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +99,7 @@ async def fetch_coinalyze_liquidations() -> None:
         }
 
         r = await get_redis()
-        await r.set("coinalyze:liquidations", json.dumps(result))
+        await set_with_ts(r, "coinalyze:liquidations", json.dumps(result))
         logger.info(
             "Stored liquidations: long=%.0f, short=%.0f, net=%.0f",
             total_long, total_short, net,
@@ -154,7 +154,7 @@ async def fetch_coinalyze_oi() -> None:
             "oi_change_pct": oi_change_pct,
         }
 
-        await r.set("coinalyze:oi", json.dumps(result))
+        await set_with_ts(r, "coinalyze:oi", json.dumps(result))
         logger.info("Stored Coinalyze OI: %.2f, change=%.4f%%", oi_value, oi_change_pct)
 
     except Exception as exc:
@@ -184,7 +184,7 @@ async def fetch_coinalyze_funding() -> None:
         }
 
         r = await get_redis()
-        await r.set("coinalyze:funding", json.dumps(result))
+        await set_with_ts(r, "coinalyze:funding", json.dumps(result))
         logger.info("Stored Coinalyze funding: %.6f", rate)
 
     except Exception as exc:
@@ -228,7 +228,7 @@ async def fetch_coinalyze_long_short() -> None:
         }
 
         r = await get_redis()
-        await r.set("coinalyze:long_short", json.dumps(result))
+        await set_with_ts(r, "coinalyze:long_short", json.dumps(result))
         logger.info("Stored Coinalyze L/S: ratio=%.4f, long=%.1f%%, short=%.1f%%", ratio, long_pct, short_pct)
 
     except Exception as exc:

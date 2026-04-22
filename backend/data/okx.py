@@ -12,7 +12,7 @@ import logging
 
 import httpx
 
-from redis_client import get_redis
+from redis_client import get_redis, set_with_ts
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +55,7 @@ async def fetch_okx_funding() -> None:
         }
 
         r = await get_redis()
-        await r.set("okx:funding", json.dumps(result))
+        await set_with_ts(r, "okx:funding", json.dumps(result))
         logger.info(
             "Stored OKX funding: USDT=%.6f, USD=%.6f, avg=%.6f",
             usdt_rate or 0,
@@ -179,7 +179,7 @@ async def fetch_okx_open_interest() -> None:
             "legs_included": legs_included,
         }
 
-        await r.set("okx:open_interest", json.dumps(result))
+        await set_with_ts(r, "okx:open_interest", json.dumps(result))
         logger.info(
             "Stored OKX OI: total=%.2f USD, change=%s%%, legs=%s",
             total_oi_usd,

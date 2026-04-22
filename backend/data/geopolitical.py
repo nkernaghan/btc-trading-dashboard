@@ -2,7 +2,7 @@
 import httpx
 import json
 import logging
-from redis_client import get_redis
+from redis_client import get_redis, set_with_ts
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,7 @@ async def fetch_geopolitical_events():
                         "country": a.get("sourcecountry", ""),
                         "url": a.get("url", ""),
                     })
-                await r.set("geopolitical:events", json.dumps(events))
+                await set_with_ts(r, "geopolitical:events", json.dumps(events))
                 logger.info(f"Geopolitical events updated: {len(events)} articles")
     except Exception as e:
         logger.error(f"Geopolitical events fetch error: {e}")
@@ -67,7 +67,7 @@ async def fetch_geopolitical_tone():
                         "tone_trend": "deteriorating" if avg_tone < -3 else "stable" if avg_tone > -1 else "elevated_risk",
                         "data_points": len(recent_tones),
                     }
-                    await r.set("geopolitical:tone", json.dumps(result))
+                    await set_with_ts(r, "geopolitical:tone", json.dumps(result))
                     logger.info(f"Geopolitical tone updated: avg={avg_tone:.2f}")
     except Exception as e:
         logger.error(f"Geopolitical tone fetch error: {e}")
@@ -102,7 +102,7 @@ async def fetch_conflict_intensity():
                             "change_pct": round(change_pct, 1),
                             "elevated": change_pct > 20,
                         }
-                        await r.set("geopolitical:conflict", json.dumps(result))
+                        await set_with_ts(r, "geopolitical:conflict", json.dumps(result))
                         logger.info(f"Conflict intensity: {change_pct:+.1f}% change")
     except Exception as e:
         logger.error(f"Conflict intensity fetch error: {e}")

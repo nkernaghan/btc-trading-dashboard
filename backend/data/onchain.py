@@ -17,7 +17,7 @@ import logging
 import httpx
 
 from config import settings
-from redis_client import get_redis
+from redis_client import get_redis, set_with_ts
 
 logger = logging.getLogger(__name__)
 
@@ -134,7 +134,7 @@ async def fetch_onchain() -> None:
         }
 
         r = await get_redis()
-        await r.set("onchain:data", json.dumps(onchain_result))
+        await set_with_ts(r, "onchain:data", json.dumps(onchain_result))
 
         # ---- USDT stablecoin data ----
         usdt_mcap = usdt.get("market_cap", 0) or 0
@@ -153,7 +153,7 @@ async def fetch_onchain() -> None:
             "usdt_total_supply": usdt_supply,
             "usdt_mcap_change_pct": round(mcap_change_pct, 4),
         }
-        await r.set("onchain:stablecoin", json.dumps(stablecoin_result))
+        await set_with_ts(r, "onchain:stablecoin", json.dumps(stablecoin_result))
 
         # ---- ETF proxy data (from BTC market data) ----
         etf_result = {
@@ -163,7 +163,7 @@ async def fetch_onchain() -> None:
             "btc_total_volume": btc.get("total_volume", 0),
             "btc_price_change_24h": btc.get("price_change_percentage_24h", 0),
         }
-        await r.set("etf:flows", json.dumps(etf_result))
+        await set_with_ts(r, "etf:flows", json.dumps(etf_result))
 
         logger.info(
             "Stored CoinGecko data (1 call): MVRV=%.4g, USDT_mcap=%.2fB, BTC_vol=%.2fB, miner_btc=%s",

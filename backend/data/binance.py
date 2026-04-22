@@ -17,7 +17,7 @@ import time
 
 import httpx
 
-from redis_client import get_redis
+from redis_client import get_redis, set_with_ts
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +69,7 @@ async def fetch_binance_funding() -> None:
         }
 
         r = await get_redis()
-        await r.set("binance:funding", json.dumps(result))
+        await set_with_ts(r, "binance:funding", json.dumps(result))
         logger.info(
             "Stored Binance funding: rate=%.6f, avg_rate=%.6f",
             rate,
@@ -124,7 +124,7 @@ async def fetch_binance_oi() -> None:
             "timestamp": timestamp,
         }
 
-        await r.set("binance:open_interest", json.dumps(result))
+        await set_with_ts(r, "binance:open_interest", json.dumps(result))
         logger.info(
             "Stored Binance OI: %.4f BTC, change=%s%%",
             oi,

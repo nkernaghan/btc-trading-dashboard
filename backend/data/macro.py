@@ -7,7 +7,7 @@ from functools import partial
 
 import yfinance as yf
 
-from redis_client import get_redis
+from redis_client import get_redis, set_with_ts
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +53,7 @@ async def fetch_macro():
 
         if results:
             r = await get_redis()
-            await r.set("macro:data", json.dumps(results))
+            await set_with_ts(r, "macro:data", json.dumps(results))
             logger.info("Stored macro data for %d tickers", len(results))
 
     except Exception as e:

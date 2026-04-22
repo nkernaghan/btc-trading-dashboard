@@ -28,7 +28,7 @@ import logging
 
 import httpx
 
-from redis_client import get_redis
+from redis_client import get_redis, set_with_ts
 
 logger = logging.getLogger(__name__)
 
@@ -120,7 +120,7 @@ async def fetch_coinglass() -> None:
         # so the engine skips it gracefully.
 
         r = await get_redis()
-        await r.set("coinglass:data", json.dumps(result))
+        await set_with_ts(r, "coinglass:data", json.dumps(result))
         logger.info("Stored derivatives data with %d sections", len(result))
 
     except Exception as exc:
