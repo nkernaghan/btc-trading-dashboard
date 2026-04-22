@@ -1,0 +1,14 @@
+.env
+.env.local
+__pycache__/
+*.pyc
+node_modules/
+.next/
+.venv/
+venv/
+data/*.db
+**/data/*.db
+*.db
+.superpowers/
+.pytest_cache/
+*.egg-info/

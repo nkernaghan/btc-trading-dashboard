@@ -1,0 +1,298 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+:root {
+  /* Light professional palette — Refinitiv / TradingView light */
+  --bg-base: #ffffff;
+  --bg-panel: #f8f9fa;
+  --bg-surface: #f0f1f3;
+  --bg-elevated: #e9eaec;
+  --bg-hover: #eef0f3;
+  --bg-header: #f3f4f6;
+
+  /* Text */
+  --text-primary: #1e1e2d;
+  --text-secondary: #6b7280;
+  --text-muted: #9ca3af;
+  --text-label: #6b7280;
+  --text-bright: #111827;
+
+  /* Borders */
+  --border-subtle: #f0f1f3;
+  --border-default: #e5e7eb;
+  --border-strong: #d1d5db;
+
+  /* Signals — kept identical, work well on light */
+  --long: #26a69a;
+  --long-dim: #1d8a80;
+  --long-bg: rgba(38, 166, 154, 0.08);
+  --long-glow: rgba(38, 166, 154, 0.15);
+  --short: #ef5350;
+  --short-dim: #c0392b;
+  --short-bg: rgba(239, 83, 80, 0.08);
+  --short-glow: rgba(239, 83, 80, 0.15);
+  --warn: #ff9800;
+  --warn-bg: rgba(255, 152, 0, 0.08);
+  --neutral: #9ca3af;
+
+  /* Accent */
+  --accent: #2962ff;
+  --accent-muted: rgba(41, 98, 255, 0.12);
+  --btc: #f0b90b;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+
+body {
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: 'Inter', -apple-system, 'Segoe UI', sans-serif;
+  font-size: 12px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── Terminal Layout ──────────────────────────────────────────────────── */
+
+.terminal-root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  background: var(--bg-base);
+}
+
+.terminal-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.terminal-left {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border-default);
+  overflow: hidden;
+}
+
+.terminal-center {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.terminal-chart {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.terminal-bottom {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border-default);
+}
+
+.terminal-right {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--border-default);
+  overflow: hidden;
+}
+
+.terminal-signal {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.terminal-position {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border-default);
+}
+
+/* ─── Resize Handles ────────────────────────────────────────────────────── */
+
+.resize-handle {
+  position: relative;
+  z-index: 10;
+  flex-shrink: 0;
+  transition: background-color 0.15s ease;
+}
+
+.resize-handle-col {
+  width: 4px;
+  cursor: col-resize;
+  background: transparent;
+}
+
+.resize-handle-row {
+  height: 4px;
+  cursor: row-resize;
+  background: transparent;
+}
+
+.resize-handle:hover,
+.resize-handle.dragging {
+  background: var(--accent);
+  opacity: 0.35;
+}
+
+.resize-handle::after {
+  content: '';
+  position: absolute;
+  background: var(--border-strong);
+  border-radius: 2px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.resize-handle-col::after {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 2px;
+  height: 24px;
+}
+
+.resize-handle-row::after {
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 24px;
+  height: 2px;
+}
+
+.resize-handle:hover::after,
+.resize-handle.dragging::after {
+  opacity: 1;
+}
+
+/* ─── Scrollbars ────────────────────────────────────────────────────────── */
+
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+::selection { background: var(--accent-muted); color: var(--text-primary); }
+
+/* ─── Panel Helpers ─────────────────────────────────────────────────────── */
+
+.panel-label {
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.panel-sublabel {
+  font-family: 'Inter', sans-serif;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.panel-divider {
+  height: 1px;
+  background: var(--border-default);
+}
+
+.panel-divider-v {
+  width: 1px;
+  background: var(--border-default);
+  align-self: stretch;
+}
+
+/* ─── Data Typography ───────────────────────────────────────────────────── */
+
+.data-value {
+  font-family: 'JetBrains Mono', 'SF Mono', monospace;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+.data-label {
+  font-family: 'Inter', sans-serif;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+/* ─── Vote Dot ──────────────────────────────────────────────────────────── */
+
+.vote-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ─── Strength Bar ──────────────────────────────────────────────────────── */
+
+.strength-pip {
+  width: 3px;
+  height: 8px;
+  border-radius: 1px;
+}
+
+/* ─── Signal Score Glow ─────────────────────────────────────────────────── */
+
+.score-glow-long {
+  background: linear-gradient(180deg, rgba(38, 166, 154, 0.05) 0%, transparent 100%);
+}
+
+.score-glow-short {
+  background: linear-gradient(180deg, rgba(239, 83, 80, 0.05) 0%, transparent 100%);
+}
+
+/* ─── Row Hover ─────────────────────────────────────────────────────────── */
+
+.row-hover {
+  transition: background-color 0.1s ease;
+}
+
+.row-hover:hover {
+  background: var(--bg-hover);
+}
+
+/* ─── Badges ───────────────────────────────────────────────────────────── */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
+  letter-spacing: 0.04em;
+}
+
+.badge-long {
+  color: var(--long);
+  background: var(--long-bg);
+  border: 1px solid rgba(38, 166, 154, 0.2);
+}
+
+.badge-short {
+  color: var(--short);
+  background: var(--short-bg);
+  border: 1px solid rgba(239, 83, 80, 0.2);
+}
+
+.badge-neutral {
+  color: var(--text-muted);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+}
