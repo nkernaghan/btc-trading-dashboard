@@ -69,3 +69,28 @@ def candles_to_arrays(
     closes = np.array([float(c["c"]) for c in candles])
     volumes = np.array([float(c["v"]) for c in candles])
     return opens, highs, lows, closes, volumes
+
+
+def drop_unclosed(candles: list[dict], interval: str) -> list[dict]:
+    """Drop the last candle if its close-time hasn't arrived yet.
+
+    Hyperliquid returns the currently-forming bar as the most recent
+    entry in candleSnapshot responses. Using that bar's running OHLC
+    values in indicator computation introduces intra-bar leak: RSI,
+    MACD, EMA etc. are biased by whatever the price is at fetch time
+    instead of using the bar's final close. The backtester uses closed
+    bars only (see backtest/simulator.py), so without this helper live
+    and backtest disagree on bar-boundary semantics.
+
+    If the last bar's close-time has already passed (rare race when
+    fetch lands exactly at bar boundary), it is kept.
+    """
+    if not candles:
+        return candles
+    interval_ms = INTERVAL_MS.get(interval, 3_600_000)
+    now_ms = int(time.time() * 1000)
+    last = candles[-1]
+    open_ms = int(last.get("t", 0) or 0)
+    if open_ms > 0 and open_ms + interval_ms > now_ms:
+        return candles[:-1]
+    return candles

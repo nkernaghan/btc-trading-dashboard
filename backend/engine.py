@@ -11,7 +11,7 @@ from models.enums import Direction, IndicatorCategory, VoteType
 from indicators.order_flow import calc_l4_depth_imbalance
 from indicators.technical_analysis import compute_technical_snapshot
 from indicators.confluence import calc_confluence
-from data.candles import fetch_candles, candles_to_arrays
+from data.candles import fetch_candles, candles_to_arrays, drop_unclosed
 from scoring.composite import compute_composite_signal
 from scoring.signal_generator import generate_signal
 from api.websocket import broadcast_signal
@@ -462,7 +462,12 @@ async def run_engine_cycle():
                 geo_crisis = True
 
     # ==================== TECHNICAL ANALYSIS (from real candle data) ====================
-    h1_candles = await fetch_candles("1h", limit=300)
+    # Fetch an extra candle then drop the unclosed one. Hyperliquid's
+    # candleSnapshot includes the currently-forming bar as the newest
+    # entry; using its running OHLC in indicator computation leaks
+    # intra-bar price into RSI/MACD/EMA/ATR and causes live output to
+    # diverge from the backtester (which uses closed bars only).
+    h1_candles = drop_unclosed(await fetch_candles("1h", limit=301), "1h")
     h1_arrays = candles_to_arrays(h1_candles)
     h1_opens, h1_highs, h1_lows, h1_closes, h1_volumes = h1_arrays
 
@@ -498,8 +503,15 @@ async def run_engine_cycle():
                            {"bull": (0.5, 1.0), "bear": (-1.0, -0.5)}))
 
     # ==================== MULTI-TIMEFRAME CONFLUENCE ====================
-    h4_candles = await fetch_candles("4h", limit=200)
-    d1_candles = await fetch_candles("1d", limit=200)
+    # Fetch raw (includes forming bar) and closed slices separately.
+    # MTF direction uses closed bars for the same reason as h1 above.
+    # The raw d1 slice is reused by CME gap detection below, which
+    # legitimately compares previous close to today's open (valid info
+    # before today's bar closes).
+    h4_candles_raw = await fetch_candles("4h", limit=201)
+    d1_candles = await fetch_candles("1d", limit=201)
+    h4_candles = drop_unclosed(h4_candles_raw, "4h")
+    d1_candles_closed = drop_unclosed(d1_candles, "1d")
 
     def _direction_from_snapshot(snap: dict) -> VoteType:
         if snap["rsi"] > 55 and snap["macd_histogram"] > 0:
@@ -517,7 +529,7 @@ async def run_engine_cycle():
     else:
         h4_dir = VoteType.NEUTRAL
 
-    d1_arrays = candles_to_arrays(d1_candles)
+    d1_arrays = candles_to_arrays(d1_candles_closed)
     if len(d1_arrays[3]) >= 15:
         d1_snapshot = compute_technical_snapshot(*d1_arrays)
         d1_dir = _direction_from_snapshot(d1_snapshot)
