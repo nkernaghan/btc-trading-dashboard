@@ -87,6 +87,48 @@ def test_drop_unclosed_unknown_interval_defaults_to_1h():
     assert len(result) == 0
 
 
+def test_drop_unclosed_exact_boundary_keeps_bar():
+    """A bar whose close_time == now exactly is KEPT (condition is strict >).
+
+    Lock in the strict-greater-than semantics: the moment a bar closes,
+    it stops being "forming" and becomes eligible for indicator use.
+    """
+    pinned_now_ms = 1_700_000_000_000  # fixed epoch — avoids clock-race flakiness
+    # Bar opened exactly 1h ago → close_time = now
+    bar = {"t": pinned_now_ms - 3_600_000, "o": "1", "h": "1", "l": "1", "c": "1", "v": "0"}
+    with patch("data.candles.time.time", return_value=pinned_now_ms / 1000):
+        result = drop_unclosed([bar], "1h")
+    assert result == [bar], "bar with close_time == now must be kept"
+
+
+def test_drop_unclosed_4h_drops_forming_bar():
+    """A 4h bar opened 1min ago (still forming) must be dropped."""
+    now_ms = int(time.time() * 1000)
+    forming = {"t": now_ms - 60_000, "o": "1", "h": "1", "l": "1", "c": "1", "v": "0"}
+    assert drop_unclosed([forming], "4h") == []
+
+
+def test_drop_unclosed_4h_keeps_closed_bar():
+    """A 4h bar opened 4h+10s ago (closed) must be kept."""
+    now_ms = int(time.time() * 1000)
+    closed = {"t": now_ms - 4 * 3_600_000 - 10_000, "o": "1", "h": "1", "l": "1", "c": "1", "v": "0"}
+    assert drop_unclosed([closed], "4h") == [closed]
+
+
+def test_drop_unclosed_1d_drops_forming_bar():
+    """A 1d bar opened 1h ago (still forming) must be dropped."""
+    now_ms = int(time.time() * 1000)
+    forming = {"t": now_ms - 3_600_000, "o": "1", "h": "1", "l": "1", "c": "1", "v": "0"}
+    assert drop_unclosed([forming], "1d") == []
+
+
+def test_drop_unclosed_1d_keeps_closed_bar():
+    """A 1d bar opened 24h+10s ago (closed) must be kept."""
+    now_ms = int(time.time() * 1000)
+    closed = {"t": now_ms - 86_400_000 - 10_000, "o": "1", "h": "1", "l": "1", "c": "1", "v": "0"}
+    assert drop_unclosed([closed], "1d") == [closed]
+
+
 @pytest.mark.asyncio
 async def test_fetch_candles_failure_returns_empty():
     with patch("data.candles.httpx.AsyncClient") as MockClient:
