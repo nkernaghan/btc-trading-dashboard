@@ -4,8 +4,10 @@ Sources used:
 - CoinGecko /coins/markets  — BTC + USDT market data in a single call
 - Blockchain.com /stats      — trade_volume_btc, hash_rate, miners_revenue_btc
 
-MVRV approximation: market_cap / (circulating_supply * ath * 0.5) as a rough
-realised-cap proxy — directionally correct but not numerically precise.
+The field stored under the `mvrv` key is NOT real MVRV. It's an
+ATH-proximity proxy (2 * price/ATH) because free APIs do not expose
+realised cap. See `_approx_mvrv` for the math and engine.py for the
+voting bands that match the proxy's actual range.
 
 Exchange flow proxy: Blockchain.com `trade_volume_btc` is total exchange volume.
 True inflow/outflow split requires a paid source, so net_exchange_flow is 0.
@@ -73,9 +75,24 @@ def _find_coin(markets: list[dict], coin_id: str) -> dict | None:
 
 
 def _approx_mvrv(btc: dict) -> float | None:
-    """Derive a MVRV approximation from CoinGecko /coins/markets data.
+    """Return an ATH-proximity proxy that is stored under the key `mvrv`.
 
-    market_cap / (circulating_supply * ath * 0.5) as a rough realised-cap proxy.
+    Formula: market_cap / (circulating_supply * ath * 0.5). This
+    algebraically simplifies to 2 * (current_price / ATH) — i.e. it
+    measures how close the current price is to the all-time high, not
+    true MVRV (market value / realised value). Real MVRV requires
+    realised-cap data from a paid on-chain source.
+
+    The engine's voting bands for this field are calibrated to the
+    proxy's actual range (0.0 to ~2.0), not to canonical MVRV
+    thresholds. If this is ever replaced with real MVRV, revert the
+    bands there to bull:(0.5, 2.0), bear:(3.5, 10).
+
+    Typical proxy values:
+      ~0.2  -> price ~10% of ATH (deep discount / capitulation)
+      ~1.0  -> price ~50% of ATH (mid-cycle)
+      ~1.6  -> price ~80% of ATH (approaching top)
+      ~2.0  -> price at ATH
     """
     market_cap = btc.get("market_cap")
     circ_supply = btc.get("circulating_supply")

@@ -239,10 +239,16 @@ async def run_engine_cycle():
 
         mvrv = safe_float(onchain.get("mvrv"), None)
         if mvrv is not None:
+            # Bands calibrated to the ATH-proximity proxy actually
+            # produced by data/onchain.py::_approx_mvrv, not to
+            # canonical MVRV. The proxy is 2 * price/ATH and sits in
+            # ~[0, 2]; it cannot reach canonical MVRV's top-signal
+            # region (3.5+). If real MVRV is ever wired in, revert
+            # to bull:(0.5, 2.0), bear:(3.5, 10).
             votes.append(vote("MVRV", IndicatorCategory.ON_CHAIN, mvrv,
-                              {"bull": (0.5, 2.0), "bear": (3.5, 10)}))
-            if mvrv > 3.5:
-                warnings.append(f"MVRV overvalued at {mvrv:.2f}")
+                              {"bull": (0.3, 1.0), "bear": (1.7, 2.0)}))
+            if mvrv > 1.8:
+                warnings.append(f"MVRV proxy near ATH at {mvrv:.2f}")
 
         sopr = safe_float(onchain.get("sopr"), None)
         if sopr is not None:
