@@ -109,7 +109,10 @@ async def fetch_onchain() -> None:
     """Fetch on-chain proxy metrics from free APIs and store in Redis.
 
     Makes ONE CoinGecko call for both BTC and USDT data, plus one Blockchain.com call.
-    Stores results in three Redis keys: onchain:data, onchain:stablecoin, etf:flows.
+    Stores results in two Redis keys: onchain:data, onchain:stablecoin. The
+    Yahoo Finance fetcher in data/etf.py is the sole writer for etf:flows —
+    writing from here too would weaken the freshness guarantee on that key
+    (the timestamp would no longer mean "Yahoo ETF fetcher is healthy").
     """
     try:
         async with httpx.AsyncClient(timeout=20) as client:
@@ -171,16 +174,6 @@ async def fetch_onchain() -> None:
             "usdt_mcap_change_pct": round(mcap_change_pct, 4),
         }
         await set_with_ts(r, "onchain:stablecoin", json.dumps(stablecoin_result))
-
-        # ---- ETF proxy data (from BTC market data) ----
-        etf_result = {
-            "last_updated": None,
-            "flows": [],
-            "btc_market_cap": btc.get("market_cap", 0),
-            "btc_total_volume": btc.get("total_volume", 0),
-            "btc_price_change_24h": btc.get("price_change_percentage_24h", 0),
-        }
-        await set_with_ts(r, "etf:flows", json.dumps(etf_result))
 
         logger.info(
             "Stored CoinGecko data (1 call): MVRV=%.4g, USDT_mcap=%.2fB, BTC_vol=%.2fB, miner_btc=%s",

@@ -1,20 +1,13 @@
-"""News and ETF flow fetchers — NewsAPI, RSS feeds, ETF tracking."""
+"""News fetchers — NewsAPI + RSS feeds. ETF flows live in data/etf.py."""
 
 import json
 import logging
 import xml.etree.ElementTree as ET
-from datetime import datetime, timezone
 
 import httpx
 
 from config import settings
 from redis_client import get_redis, set_with_ts
-
-
-def _cg_headers() -> dict:
-    if settings.coingecko_api_key:
-        return {"x-cg-demo-api-key": settings.coingecko_api_key}
-    return {}
 
 logger = logging.getLogger(__name__)
 
@@ -124,48 +117,3 @@ async def fetch_news_api():
 
     except Exception as e:
         logger.error("fetch_news_api failed: %s", e)
-
-
-async def fetch_etf_flows():
-    """Fetch Bitcoin ETF flow data and store in Redis.
-
-    Uses a public data source for BTC spot ETF inflows/outflows.
-    Falls back to CoinGecko ETF token data if primary source unavailable.
-    """
-    try:
-        result = {
-            "last_updated": datetime.now(timezone.utc).isoformat(),
-            "flows": [],
-        }
-
-        async with httpx.AsyncClient(timeout=15) as client:
-            # Fetch ETF-related tickers from CoinGecko as proxy
-            try:
-                resp = await client.get(
-                    "https://api.coingecko.com/api/v3/coins/markets",
-                    params={
-                        "vs_currency": "usd",
-                        "ids": "bitcoin",
-                        "order": "market_cap_desc",
-                    },
-                    headers=_cg_headers(),
-                )
-                resp.raise_for_status()
-                data = resp.json()
-
-                if data:
-                    btc = data[0]
-                    result["btc_market_cap"] = btc.get("market_cap", 0)
-                    result["btc_total_volume"] = btc.get("total_volume", 0)
-                    result["btc_price_change_24h"] = btc.get(
-                        "price_change_percentage_24h", 0
-                    )
-            except Exception as e:
-                logger.warning("ETF proxy fetch failed: %s", e)
-
-        r = await get_redis()
-        await set_with_ts(r, "etf:flows", json.dumps(result))
-        logger.info("Stored ETF flow data")
-
-    except Exception as e:
-        logger.error("fetch_etf_flows failed: %s", e)
