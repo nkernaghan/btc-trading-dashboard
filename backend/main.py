@@ -26,7 +26,8 @@ app = FastAPI(title="BTC Trading Dashboard", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://btc-dashboard-frontend-k5a3.onrender.com"],
+    allow_origins=["http://localhost:3000", "https://sharpsignal.vercel.app"],
+    allow_origin_regex=r"https://sharpsignal-.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
