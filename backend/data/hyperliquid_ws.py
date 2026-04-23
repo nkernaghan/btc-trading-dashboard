@@ -103,10 +103,12 @@ async def run_hyperliquid_ws():
         },
     ]
 
-    # Rolling window of recent 1m bars for outcome tracking; kept short
-    # because the tracker runs once per minute and only needs to cover
-    # its own inter-fire interval plus a small safety margin.
-    _1M_RECENT_LIMIT = 10
+    # Rolling window of recent 1m bars for outcome tracking. Sized to
+    # 24h so the outcome tracker can see wicks across the full lifetime
+    # of any open signal — anything shorter lets SL/TP hits escape if
+    # price reverts before the tracker next runs. ~1440 bars ×
+    # ~120B JSON ≈ 170KB in Redis, acceptable.
+    _1M_RECENT_LIMIT = 1440
 
     while True:
         try:

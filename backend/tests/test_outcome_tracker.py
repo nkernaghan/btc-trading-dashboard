@@ -223,6 +223,68 @@ async def test_signal_newer_than_all_bars_is_not_resolved():
 
 
 @pytest.mark.asyncio
+async def test_resolves_signal_older_than_short_window():
+    """Regression for must-fix #4: a signal whose lifetime spans longer
+    than the old 10-bar window must still resolve, provided the ring
+    buffer is sized to cover it. Seeds 60 bars (1h of 1m data) with the
+    SL wick buried ~50 minutes in the past — the pre-fix 10-bar buffer
+    would have evicted it before the tracker next ran, silently missing
+    the stop-out once spot recovered.
+    """
+    # 60 bars, times 1_700_000_000 .. +59*60
+    base_t = 1_700_000_000
+    recent_bars = []
+    for i in range(60):
+        t = base_t + i * 60
+        # Default calm bars around 67000
+        bar = {
+            "time": t, "open": 67000, "high": 67050, "low": 66950,
+            "close": 67000, "volume": 1.0,
+        }
+        # Put the SL wick in bar index 5 (~50 minutes before the tail)
+        if i == 5:
+            bar = {
+                "time": t, "open": 67000, "high": 67100, "low": 65800,
+                "close": 67050, "volume": 2.5,
+            }
+        recent_bars.append(bar)
+
+    async def mock_get(key):
+        if key == "btc:candles:1m:recent":
+            return json.dumps(recent_bars)
+        if key == "btc:price":
+            # Spot has since recovered back into range — pre-fix
+            # "check current price" code would see no SL hit.
+            return json.dumps({"price": 67350})
+        return None
+
+    mock_redis = AsyncMock()
+    mock_redis.get = mock_get
+
+    # Signal predates every bar, so the age filter admits them all.
+    row = _mock_signal_row(
+        7, "LONG", 66900, 67100, 66000, 68500, 70000,
+        timestamp="1970-01-01T00:00:00+00:00",
+    )
+    mock_cursor = AsyncMock()
+    mock_cursor.fetchall = AsyncMock(return_value=[row])
+
+    mock_db = AsyncMock()
+    mock_db.execute = AsyncMock(return_value=mock_cursor)
+    mock_db.commit = AsyncMock()
+    mock_db.close = AsyncMock()
+
+    with patch("scoring.outcome_tracker.get_redis", return_value=mock_redis), \
+         patch("scoring.outcome_tracker.get_db", return_value=mock_db):
+        await check_signal_outcomes()
+
+    update_calls = [c for c in mock_db.execute.call_args_list if "UPDATE" in str(c)]
+    assert len(update_calls) == 1, "expected SL resolution from older-window wick"
+    args = update_calls[0][0][1]
+    assert args[0] == "SL", f"expected SL, got {args[0]}"
+
+
+@pytest.mark.asyncio
 async def test_accuracy_empty():
     """Accuracy with no resolved signals should return zeros."""
     mock_cursor = AsyncMock()
